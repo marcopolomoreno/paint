@@ -385,6 +385,9 @@ export class App {
         return void (await this.save(true));
       case "properties":
         return this.imageProperties();
+      case "close":
+        // Passa pelo onCloseRequested, que pergunta se quer salvar.
+        return getCurrentWindow().close();
       case "quit":
         return this.quit();
       case "undo":

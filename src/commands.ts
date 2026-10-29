@@ -6,6 +6,7 @@ export type CommandId =
   | "save"
   | "saveAs"
   | "properties"
+  | "close"
   | "quit"
   | "undo"
   | "redo"
@@ -48,8 +49,6 @@ export interface CommandItem {
   /** Atalho no formato "Mod+Shift+S"; Mod é Cmd no Mac e Ctrl no Windows. */
   keys?: string;
   toggle?: ToggleSetting;
-  /** Fora do Mac; no Mac o item fica no menu do aplicativo. */
-  notMac?: boolean;
   /** Em campos de texto o atalho fica com o próprio campo (desfazer, copiar…). */
   textEdit?: boolean;
 }
@@ -68,12 +67,14 @@ export const MENUS: MenuDef[] = [
       { id: "new", label: "Novo", keys: "Mod+N" },
       { id: "open", label: "Abrir…", keys: "Mod+O" },
       "-",
+      // No Windows Ctrl+W é "Redimensionar", como no Paint.
+      ...(isMac ? [{ id: "close", label: "Fechar", keys: "Mod+W" } as const] : []),
       { id: "save", label: "Salvar", keys: "Mod+S" },
       { id: "saveAs", label: "Salvar como…", keys: "Mod+Shift+S" },
       "-",
       { id: "properties", label: "Propriedades da imagem…", keys: "Mod+E" },
-      "-",
-      { id: "quit", label: "Sair", notMac: true },
+      // No Mac, "Encerrar" fica no menu do aplicativo.
+      ...(isMac ? [] : (["-", { id: "quit", label: "Sair" }] as const)),
     ],
   },
   {

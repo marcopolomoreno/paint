@@ -82,7 +82,7 @@ export async function installNativeMenu(app: App) {
     const items = [];
     for (const entry of menu.items) {
       if (entry === "-") items.push(await separator());
-      else if (!entry.notMac) items.push(await makeItem(entry));
+      else items.push(await makeItem(entry));
     }
     submenus.push(await Submenu.new({ text: menu.label, items }));
   }
