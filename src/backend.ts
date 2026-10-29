@@ -44,6 +44,11 @@ export const backend = {
   /** Máscara do "remover fundo": um byte por pixel (255 = objeto, 0 = fundo). */
   removeBackground: async (image: ImageData) =>
     new Uint8Array(await invoke<ArrayBuffer>("remove_background", bytesOf(image), { headers: sizeHeaders(image) })),
+  loadSession: () => invoke<string | null>("load_session"),
+  saveSession: (json: string) => invoke<void>("save_session", { json }),
+  saveLayer: (id: string, png: Uint8Array) => invoke<void>("save_layer", png, { headers: { id } }),
+  loadLayer: (id: string) => invoke<ArrayBuffer>("load_layer", { id }),
+  pruneLayers: (keep: string[]) => invoke<void>("prune_layers", { keep }),
   takePendingFiles: () => invoke<string[]>("take_pending_files"),
   quit: () => invoke<void>("quit"),
 };

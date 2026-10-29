@@ -2,7 +2,7 @@ mod removebg;
 
 use std::{
     fs,
-    io::{Cursor, Write},
+    io::{Cursor, ErrorKind, Write},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -87,6 +87,63 @@ fn rgba_response(width: u32, height: u32, rgba: &[u8]) -> Response {
     out.extend_from_slice(&height.to_le_bytes());
     out.extend_from_slice(rgba);
     Response::new(out)
+}
+
+// ---------------------------------------------------------------------------
+// Sessão: `session/session.json` guarda configurações e a lista de camadas;
+// cada camada fica em `session/layers/<id>.png`.
+// ---------------------------------------------------------------------------
+
+fn session_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("session");
+    fs::create_dir_all(dir.join("layers")).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn layer_path(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("identificador de camada inválido".into());
+    }
+    Ok(session_dir(app)?.join("layers").join(format!("{id}.png")))
+}
+
+#[tauri::command]
+async fn load_session(app: AppHandle) -> Result<Option<String>, String> {
+    match fs::read_to_string(session_dir(&app)?.join("session.json")) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+async fn save_session(app: AppHandle, json: String) -> Result<(), String> {
+    atomic_write(&session_dir(&app)?.join("session.json"), json.as_bytes()).map_err(|e| e.to_string())
+}
+
+/// PNG de uma camada, recebido como bytes crus; o id vai no cabeçalho.
+#[tauri::command]
+async fn save_layer(app: AppHandle, request: Request<'_>) -> Result<(), String> {
+    let path = layer_path(&app, &header(&request, "id")?)?;
+    atomic_write(&path, raw_body(&request)?).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn load_layer(app: AppHandle, id: String) -> Result<Response, String> {
+    fs::read(layer_path(&app, &id)?).map(Response::new).map_err(|e| e.to_string())
+}
+
+/// Apaga arquivos de camadas que não fazem mais parte da sessão.
+#[tauri::command]
+async fn prune_layers(app: AppHandle, keep: Vec<String>) -> Result<(), String> {
+    for entry in fs::read_dir(session_dir(&app)?.join("layers")).map_err(|e| e.to_string())?.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let id = name.strip_suffix(".png").unwrap_or("");
+        if !keep.iter().any(|k| k == id) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +320,11 @@ pub fn run() {
             clipboard_read_text,
             clipboard_write_text,
             remove_background,
+            load_session,
+            save_session,
+            save_layer,
+            load_layer,
+            prune_layers,
             take_pending_files,
             quit,
         ])

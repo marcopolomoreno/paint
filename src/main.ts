@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App, inTauri } from "./app";
 import { isMac } from "./platform";
 import { installHtmlMenu, installKeyboard, installNativeMenu } from "./ui/menus";
+import { Session } from "./session";
 import { installLayersPanel } from "./ui/layers";
 import { Rulers } from "./ui/rulers";
 import { StatusBar } from "./ui/statusbar";
@@ -26,6 +27,12 @@ async function start() {
   );
   installKeyboard(app);
   app.init();
+  // Configurações e imagem da última vez (com camadas e alterações não salvas).
+  if (inTauri) {
+    app.session = new Session(app);
+    await app.session.restore();
+  }
+  app.applySettings();
   if (import.meta.env.DEV) Object.assign(window, { app });
 
   if (isMac && inTauri) await installNativeMenu(app).catch((err) => console.error("Falha ao criar o menu", err));
@@ -45,12 +52,15 @@ async function start() {
   });
   await app.openPending();
 
-  // Fechar a janela pergunta se quer salvar as alterações.
+  // Fechar a janela pergunta se quer salvar as alterações e grava a sessão.
   const win = getCurrentWindow();
   await win.onCloseRequested(async (event) => {
     event.preventDefault();
-    if (await app.confirmDiscard()) await win.destroy();
+    if (await app.prepareToClose()) await win.destroy();
   });
+  // A sessão também é gravada ao perder o foco e de minuto em minuto (só o que mudou).
+  window.addEventListener("blur", () => void app.session?.save());
+  window.setInterval(() => void app.session?.save(), 60_000);
 }
 
 function installTitleButtons(app: App) {

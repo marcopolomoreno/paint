@@ -1,7 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { backend } from "./backend";
 import { TEXT_EDIT_COMMANDS, type CommandId, type ToggleSetting } from "./commands";
-import { PaintDoc, makeLayer } from "./doc";
+import { PaintDoc, makeLayer, type Layer } from "./doc";
+import type { DocMode, Session } from "./session";
 import { askOpenPath, askSavePath, fileName, isImagePath, loadImage, saveImage } from "./files";
 import { clamp, context2d, createCanvas, type Rect } from "./geometry";
 import * as ops from "./imageops";
@@ -56,6 +57,7 @@ export class App {
     grid: false,
   };
   rulers?: Rulers;
+  session?: Session;
   opts: Options = {
     selectMode: "rect",
     brush: "round",
@@ -141,14 +143,57 @@ export class App {
     this.doc.reset(DEFAULT_WIDTH, DEFAULT_HEIGHT, "#ffffff");
     this.view.layout();
     this.setTool("pencil");
-    // O zoom inicial depende do tamanho da área de desenho, que só existe
-    // depois do primeiro layout.
+    this.fitWhenReady();
+  }
+
+  /**
+   * Ajusta o zoom à janela. A área de desenho só tem tamanho depois do
+   * primeiro layout; até lá, espera.
+   */
+  private fitWhenReady() {
+    if (this.view.viewport.clientWidth >= 100) {
+      this.view.setZoom(this.view.fitZoom());
+      return;
+    }
     const observer = new ResizeObserver(() => {
       if (this.view.viewport.clientWidth < 100) return;
       observer.disconnect();
       this.view.setZoom(this.view.fitZoom());
     });
     observer.observe(this.view.viewport);
+  }
+
+  /** Aplica na interface as configurações restauradas da sessão. */
+  applySettings() {
+    const id = this.toolId;
+    this.toolId = "pencil";
+    this.setTool(id in this.tools ? id : "pencil");
+    this.status.setVisible(this.settings.statusBar);
+    this.rulers?.setVisible(this.settings.rulers);
+    this.updateGrid();
+    this.sel.refreshKey();
+    this.onSettingsChange();
+    this.notify();
+  }
+
+  /** Imagem restaurada da sessão. */
+  restoreDocument(layers: Layer[], active: number, path: string | null, dirty: boolean) {
+    this.discardPending();
+    this.doc.load(layers, active);
+    this.doc.path = path;
+    this.doc.dirty = dirty;
+    this.updateTitle();
+    this.fitWhenReady();
+  }
+
+  /** Reabre o arquivo da sessão anterior; se ele sumiu, fica a imagem em branco. */
+  async reopen(path: string) {
+    try {
+      const canvas = await loadImage(path);
+      this.restoreDocument([makeLayer("Plano de fundo", canvas)], 0, path, false);
+    } catch (err) {
+      console.warn("Arquivo da sessão anterior não abriu", err);
+    }
   }
 
   // ------------------------------------------------------------------------
@@ -573,8 +618,26 @@ export class App {
     return true;
   }
 
+  /**
+   * Antes de fechar: pergunta se quer salvar e grava a sessão. Com "Não
+   * salvar", a próxima abertura reabre o arquivo como está no disco (ou uma
+   * imagem em branco). Devolve false se o usuário cancelou.
+   */
+  async prepareToClose(): Promise<boolean> {
+    this.commitPending();
+    let mode: DocMode = "full";
+    if (this.doc.dirty) {
+      const choice = await askToSave(this.docName);
+      if (choice === "cancel") return false;
+      if (choice === "save" && !(await this.save())) return false;
+      if (choice === "discard") mode = "discard";
+    }
+    await this.session?.save(mode);
+    return true;
+  }
+
   async quit() {
-    if (await this.confirmDiscard()) await backend.quit();
+    if (await this.prepareToClose()) await backend.quit();
   }
 
   // ------------------------------------------------------------------------
