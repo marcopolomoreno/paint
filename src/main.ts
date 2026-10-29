@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App, inTauri } from "./app";
+import { backend } from "./backend";
 import { isMac } from "./platform";
 import { installHtmlMenu, installKeyboard, installNativeMenu } from "./ui/menus";
 import { Session } from "./session";
@@ -58,6 +59,13 @@ async function start() {
     event.preventDefault();
     if (await app.prepareToClose()) await win.destroy();
   });
+  // Encerrar pelo Dock ou no fim da sessão do macOS também pergunta.
+  if (isMac) {
+    await listen("quit-requested", async () => {
+      await backend.replyToQuit(await app.prepareToClose().catch(() => false));
+    });
+    await backend.watchQuitRequests();
+  }
   // A sessão também é gravada ao perder o foco e de minuto em minuto (só o que mudou).
   window.addEventListener("blur", () => void app.session?.save());
   window.setInterval(() => void app.session?.save(), 60_000);

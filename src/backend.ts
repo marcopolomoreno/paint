@@ -51,4 +51,7 @@ export const backend = {
   pruneLayers: (keep: string[]) => invoke<void>("prune_layers", { keep }),
   takePendingFiles: () => invoke<string[]>("take_pending_files"),
   quit: () => invoke<void>("quit"),
+  /** macOS: pedidos de encerrar do sistema (Dock, logout) passam a chegar como "quit-requested". */
+  watchQuitRequests: () => invoke<void>("watch_quit_requests"),
+  replyToQuit: (quit: boolean) => invoke<void>("reply_to_quit", { quit }),
 };

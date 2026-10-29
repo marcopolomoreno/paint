@@ -89,6 +89,7 @@ export class App {
   private readonly brushCursor = document.createElement("div");
   private lastTitle = "";
   private lastCommand = { id: "", source: "", time: 0 };
+  private closing: Promise<boolean> | null = null;
   /** Usado pelo menu nativo para atualizar as marcas de opção. */
   onSettingsChange: () => void = () => {};
 
@@ -637,9 +638,15 @@ export class App {
   /**
    * Antes de fechar: pergunta se quer salvar e grava a sessão. Com "Não
    * salvar", a próxima abertura reabre o arquivo como está no disco (ou uma
-   * imagem em branco). Devolve false se o usuário cancelou.
+   * imagem em branco). Devolve false se o usuário cancelou. Fechar a janela
+   * e encerrar pelo Dock ao mesmo tempo fazem uma pergunta só.
    */
-  async prepareToClose(): Promise<boolean> {
+  prepareToClose(): Promise<boolean> {
+    this.closing ??= this.askToClose().finally(() => (this.closing = null));
+    return this.closing;
+  }
+
+  private async askToClose(): Promise<boolean> {
     this.commitPending();
     let mode: DocMode = "full";
     if (this.doc.dirty) {

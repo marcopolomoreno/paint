@@ -273,6 +273,81 @@ fn quit(app: AppHandle) {
     app.exit(0);
 }
 
+// ---------------------------------------------------------------------------
+// "Encerrar" pelo Dock, pelo Finder ou no fim da sessão do macOS chega como
+// `applicationShouldTerminate:`, que o tao não implementa: o app fecharia sem
+// perguntar se quer salvar. O método é acrescentado ao delegate do tao e
+// responde "mais tarde" (o logout espera) até a interface decidir.
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "macos")]
+mod mac_quit {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    };
+
+    use objc2::{ffi, runtime::AnyObject, sel, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSApplicationTerminateReply};
+    use tauri::{AppHandle, Emitter};
+
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+    /// A interface já ouve "quit-requested"; antes disso, encerra direto.
+    pub static UI_READY: AtomicBool = AtomicBool::new(false);
+    static WAITING: AtomicBool = AtomicBool::new(false);
+
+    extern "C-unwind" fn should_terminate(_: &AnyObject, _: objc2::runtime::Sel, _: &AnyObject) -> NSApplicationTerminateReply {
+        let Some(app) = APP.get().filter(|_| UI_READY.load(Ordering::SeqCst)) else {
+            return NSApplicationTerminateReply::TerminateNow;
+        };
+        // Um segundo pedido enquanto a pergunta está aberta não abre outra.
+        if !WAITING.swap(true, Ordering::SeqCst) && app.emit("quit-requested", ()).is_err() {
+            WAITING.store(false, Ordering::SeqCst);
+            return NSApplicationTerminateReply::TerminateNow;
+        }
+        NSApplicationTerminateReply::TerminateLater
+    }
+
+    pub fn install(app: &AppHandle) {
+        let _ = APP.set(app.clone());
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else { return };
+        let delegate: &AnyObject = (*delegate).as_ref();
+        let class = delegate.class() as *const _ as *mut _;
+        // Retorno NSUInteger ("Q"), self, _cmd e o NSApplication.
+        unsafe {
+            let imp: objc2::runtime::Imp = std::mem::transmute(
+                should_terminate as extern "C-unwind" fn(&AnyObject, objc2::runtime::Sel, &AnyObject) -> NSApplicationTerminateReply,
+            );
+            ffi::class_addMethod(class, sel!(applicationShouldTerminate:), imp, c"Q@:@".as_ptr());
+        }
+    }
+
+    pub fn reply(quit: bool) {
+        if WAITING.swap(false, Ordering::SeqCst) {
+            if let Some(mtm) = MainThreadMarker::new() {
+                NSApplication::sharedApplication(mtm).replyToApplicationShouldTerminate(quit);
+            }
+        }
+    }
+}
+
+/// A interface passa a decidir os pedidos de encerrar do sistema.
+#[tauri::command]
+fn watch_quit_requests() {
+    #[cfg(target_os = "macos")]
+    mac_quit::UI_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Resposta da interface a um "quit-requested": encerra ou continua aberto.
+#[tauri::command]
+fn reply_to_quit(quit: bool) {
+    #[cfg(target_os = "macos")]
+    mac_quit::reply(quit);
+    #[cfg(not(target_os = "macos"))]
+    let _ = quit;
+}
+
 /// Caminhos de arquivo passados na linha de comando (ex.: dois cliques num .png no Windows).
 fn paths_from_args(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<String> {
     args.into_iter()
@@ -327,7 +402,14 @@ pub fn run() {
             prune_layers,
             take_pending_files,
             quit,
+            watch_quit_requests,
+            reply_to_quit,
         ])
+        .setup(|_app| {
+            #[cfg(target_os = "macos")]
+            mac_quit::install(_app.handle());
+            Ok(())
+        })
         .build(tauri::generate_context!())
         .expect("falha ao iniciar o aplicativo");
 

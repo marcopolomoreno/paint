@@ -23,6 +23,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # (sem bibliotecas nativas, funciona em Mac Intel, Apple Silicon e Windows).
 tract-onnx = "0.23"
 
+# "Encerrar" pelo Dock ou no fim da sessão do macOS (as mesmas versões que o Tauri usa).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder"] }
+
 # Binário de release o menor possível.
 [profile.release]
 codegen-units = 1
