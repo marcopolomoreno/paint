@@ -14,6 +14,14 @@ const bytesOf = (image: ImageData) => new Uint8Array(image.data.buffer, image.da
 
 const sizeHeaders = (image: ImageData) => ({ width: String(image.width), height: String(image.height) });
 
+/** Operações na área de transferência, uma de cada vez (colar logo depois de copiar espera a cópia). */
+let clipboardQueue: Promise<unknown> = Promise.resolve();
+function clipboard<T>(task: () => Promise<T>): Promise<T> {
+  const result = clipboardQueue.then(task, task);
+  clipboardQueue = result.catch(() => {});
+  return result;
+}
+
 /**
  * Comandos implementados em `src-tauri/src/lib.rs`. Imagens trafegam como
  * bytes crus; o caminho vai num cabeçalho (com encodeURIComponent, pois
@@ -28,11 +36,11 @@ export const backend = {
     invoke<void>("write_encoded", bytesOf(image), {
       headers: { path: encodeURIComponent(path), format, ...sizeHeaders(image) },
     }),
-  clipboardReadImage: async () => parseRgba(await invoke<ArrayBuffer>("clipboard_read_image")),
+  clipboardReadImage: () => clipboard(async () => parseRgba(await invoke<ArrayBuffer>("clipboard_read_image"))),
   clipboardWriteImage: (image: ImageData) =>
-    invoke<void>("clipboard_write_image", bytesOf(image), { headers: sizeHeaders(image) }),
-  clipboardReadText: () => invoke<string | null>("clipboard_read_text"),
-  clipboardWriteText: (text: string) => invoke<void>("clipboard_write_text", { text }),
+    clipboard(() => invoke<void>("clipboard_write_image", bytesOf(image), { headers: sizeHeaders(image) })),
+  clipboardReadText: () => clipboard(() => invoke<string | null>("clipboard_read_text")),
+  clipboardWriteText: (text: string) => clipboard(() => invoke<void>("clipboard_write_text", { text })),
   takePendingFiles: () => invoke<string[]>("take_pending_files"),
   quit: () => invoke<void>("quit"),
 };

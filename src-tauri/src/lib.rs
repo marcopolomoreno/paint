@@ -153,11 +153,14 @@ async fn write_encoded(request: Request<'_>) -> Result<(), String> {
 
 // ---------------------------------------------------------------------------
 // Área de transferência com imagens (o webview só lida bem com texto).
+// Comandos síncronos rodam na thread principal: no Windows a área de
+// transferência é aberta por thread, e duas operações em threads diferentes
+// falham com "o thread não tem uma área de transferência aberta" (erro 1418).
 // ---------------------------------------------------------------------------
 
 /// Resposta vazia quando a área de transferência não tem imagem.
 #[tauri::command]
-async fn clipboard_read_image(app: AppHandle) -> Response {
+fn clipboard_read_image(app: AppHandle) -> Response {
     match app.clipboard().read_image() {
         Ok(img) => rgba_response(img.width(), img.height(), img.rgba()),
         Err(_) => Response::new(Vec::new()),
@@ -165,7 +168,7 @@ async fn clipboard_read_image(app: AppHandle) -> Response {
 }
 
 #[tauri::command]
-async fn clipboard_write_image(app: AppHandle, request: Request<'_>) -> Result<(), String> {
+fn clipboard_write_image(app: AppHandle, request: Request<'_>) -> Result<(), String> {
     let width = header_u32(&request, "width")?;
     let height = header_u32(&request, "height")?;
     let rgba = raw_body(&request)?;
@@ -178,12 +181,12 @@ async fn clipboard_write_image(app: AppHandle, request: Request<'_>) -> Result<(
 }
 
 #[tauri::command]
-async fn clipboard_read_text(app: AppHandle) -> Option<String> {
+fn clipboard_read_text(app: AppHandle) -> Option<String> {
     app.clipboard().read_text().ok()
 }
 
 #[tauri::command]
-async fn clipboard_write_text(app: AppHandle, text: String) -> Result<(), String> {
+fn clipboard_write_text(app: AppHandle, text: String) -> Result<(), String> {
     app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
