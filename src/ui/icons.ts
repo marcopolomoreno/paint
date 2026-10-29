@@ -23,7 +23,7 @@ const PATHS = {
   picker:
     '<path d="m10 6-6.5 6.5L3 17l4.5-.5L14 10" class="f-blue-soft"/><path d="M14 2.5a2.1 2.1 0 0 1 3 3L15 7.5l1 1-1.5 1.5-5-5L11 3.5l1 1z" class="f-blue"/>',
   brush:
-    '<path d="M17 3 9 11" stroke-width="2.2" class="s-gray"/><path d="M8.5 11.5c-2-1-4 0-4.5 2S3 17 2.5 17.5c2 .5 5 0 6-1.5s1-3 0-4.5z" class="f-brown"/>',
+    '<path d="M17 3 9 11" stroke-width="1.8" class="s-gray"/><path d="M8.5 11.5c-2-1-4 0-4.5 2S3 17 2.5 17.5c2 .5 5 0 6-1.5s1-3 0-4.5z" class="f-brown"/>',
   shapes: '<rect x="2.5" y="8.5" width="9" height="9" rx="1"/><circle cx="13" cy="7" r="4.5" class="f-blue-soft s-blue"/>',
   outline: '<rect x="3" y="3" width="14" height="14" rx="2"/>',
   shapeFill: '<rect x="3" y="3" width="14" height="14" rx="2" class="f-blue-soft"/>',
@@ -49,5 +49,5 @@ const PATHS = {
 export type IconName = keyof typeof PATHS;
 
 export function icon(name: IconName, size = 20): string {
-  return `<svg class="icon" viewBox="0 0 20 20" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
+  return `<svg class="icon" viewBox="0 0 20 20" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 }

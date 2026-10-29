@@ -123,7 +123,7 @@ export function installToolbar(app: App, root: HTMLElement, contextBar: HTMLElem
   );
   // A lupa usa um ícone próprio.
   toolsGrid.lastElementChild!.innerHTML =
-    '<svg class="icon" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4.5 4.5"/></svg>';
+    '<svg class="icon" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4.5 4.5"/></svg>';
 
   // --- Pincéis ---------------------------------------------------------
   const brushMain = button("brush", "Pincel", () => app.setTool("brush"));
@@ -153,7 +153,7 @@ export function installToolbar(app: App, root: HTMLElement, contextBar: HTMLElem
     const b = el(
       "button",
       "tb-button tb-shape",
-      `<svg class="icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><path d="${shapeIconPath(shape.id)}"/></svg>`,
+      `<svg class="icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"><path d="${shapeIconPath(shape.id)}"/></svg>`,
     );
     b.title = shape.label;
     b.addEventListener("click", () => {

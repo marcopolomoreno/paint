@@ -702,13 +702,14 @@ export class App {
     this.doc.transformAll((source, _layer, i) => fn(source, i === 0 ? this.secondary : null));
   }
 
-  resizeCanvas(width: number, height: number) {
+  /** Muda o tamanho da tela; o conteúdo vai para (`offsetX`, `offsetY`) — negativo corta à esquerda/em cima. */
+  resizeCanvas(width: number, height: number, offsetX = 0, offsetY = 0) {
     this.commitPending();
     width = clamp(Math.round(width), 1, MAX_SIDE);
     height = clamp(Math.round(height), 1, MAX_SIDE);
-    if (width === this.doc.width && height === this.doc.height) return;
+    if (width === this.doc.width && height === this.doc.height && !offsetX && !offsetY) return;
     this.doc.transformAll((source, _layer, i) =>
-      ops.resizeCanvas(source, width, height, i === 0 ? this.secondary : null),
+      ops.resizeCanvas(source, width, height, i === 0 ? this.secondary : null, offsetX, offsetY),
     );
   }
 

@@ -163,6 +163,11 @@ body:not(.mac) .title-actions::before {
   font-size: 12px;
 }
 
+/* No Windows a barra de título do sistema já mostra o nome do arquivo; no Mac ela fica escondida. */
+body:not(.mac) #doc-title {
+  display: none;
+}
+
 .drag-fill {
   flex: 1;
   align-self: stretch;
@@ -749,28 +754,54 @@ body.mac #menubar {
   background: #fff;
 }
 
-.canvas-handle.e {
-  right: -10px;
-  top: calc(50% - 4px);
-  cursor: ew-resize;
-}
-
+.canvas-handle.n,
 .canvas-handle.s {
-  bottom: -10px;
   left: calc(50% - 4px);
   cursor: ns-resize;
 }
 
+.canvas-handle.e,
+.canvas-handle.w {
+  top: calc(50% - 4px);
+  cursor: ew-resize;
+}
+
+.canvas-handle.nw,
+.canvas-handle.se {
+  cursor: nwse-resize;
+}
+
+.canvas-handle.ne,
+.canvas-handle.sw {
+  cursor: nesw-resize;
+}
+
+.canvas-handle.n,
+.canvas-handle.ne,
+.canvas-handle.nw {
+  top: -10px;
+}
+
+.canvas-handle.s,
+.canvas-handle.se,
+.canvas-handle.sw {
+  bottom: -10px;
+}
+
+.canvas-handle.e,
+.canvas-handle.ne,
 .canvas-handle.se {
   right: -10px;
-  bottom: -10px;
-  cursor: nwse-resize;
+}
+
+.canvas-handle.w,
+.canvas-handle.nw,
+.canvas-handle.sw {
+  left: -10px;
 }
 
 .resize-preview {
   position: absolute;
-  left: 0;
-  top: 0;
   border: 1px dashed #333;
   outline: 1px dashed #fff;
   outline-offset: -2px;

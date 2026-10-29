@@ -83,21 +83,23 @@ export function invertColors(src: HTMLCanvasElement): HTMLCanvasElement {
   return out;
 }
 
-/** Nova tela de desenho com o conteúdo antigo no canto superior esquerdo. */
+/** Nova tela de desenho com o conteúdo antigo em (`offsetX`, `offsetY`); por padrão, no canto superior esquerdo. */
 export function resizeCanvas(
   src: HTMLCanvasElement,
   width: number,
   height: number,
   background: string | null,
+  offsetX = 0,
+  offsetY = 0,
 ): HTMLCanvasElement {
   const out = createCanvas(width, height);
   const ctx = context2d(out);
   if (background) {
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, width, height);
-    ctx.clearRect(0, 0, Math.min(width, src.width), Math.min(height, src.height));
+    ctx.clearRect(offsetX, offsetY, src.width, src.height);
   }
-  ctx.drawImage(src, 0, 0);
+  ctx.drawImage(src, offsetX, offsetY);
   return out;
 }
 

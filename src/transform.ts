@@ -12,7 +12,7 @@ const CURSORS = ["ns-resize", "nesw-resize", "ew-resize", "nwse-resize"];
 const HANDLE_DIR: Record<Handle, number> = { n: 0, ne: 1, e: 2, se: 3, s: 4, sw: 5, w: 6, nw: 7 };
 
 const ROTATE_ICON =
-  '<svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="8.5"/><path d="M13.5 8.5a4 4 0 1 0-.2 3.6"/><path d="M14 5.5v3h-3"/><circle cx="10" cy="10" r=".9" fill="currentColor" stroke="none"/></svg>';
+  '<svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="8.5"/><path d="M13.5 8.5a4 4 0 1 0-.2 3.6"/><path d="M14 5.5v3h-3"/><circle cx="10" cy="10" r=".9" fill="currentColor" stroke="none"/></svg>';
 
 /** Ponto da alça no retângulo sem giro. */
 function handlePoint(r: Rect, h: Handle): Point {

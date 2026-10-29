@@ -5,9 +5,9 @@ const THUMB_W = 56;
 const THUMB_H = 42;
 
 const EYE_OPEN =
-  '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/></svg>';
+  '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/></svg>';
 const EYE_CLOSED =
-  '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 3l14 14M8.2 5a8.6 8.6 0 0 1 1.8-.2c5 0 8 5.2 8 5.2a14 14 0 0 1-2.2 2.8M5.3 6.4A13.6 13.6 0 0 0 2 10s3 5.5 8 5.5a8 8 0 0 0 3.6-.9"/></svg>';
+  '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M3 3l14 14M8.2 5a8.6 8.6 0 0 1 1.8-.2c5 0 8 5.2 8 5.2a14 14 0 0 1-2.2 2.8M5.3 6.4A13.6 13.6 0 0 0 2 10s3 5.5 8 5.5a8 8 0 0 0 3.6-.9"/></svg>';
 
 interface Row {
   el: HTMLElement;
@@ -27,25 +27,25 @@ export function installLayersPanel(app: App, panel: HTMLElement) {
     <header class="lp-header">
       <span>Camadas</span>
       <button class="lp-button" data-cmd="newLayer" title="Nova camada">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
       </button>
     </header>
     <div class="lp-list" role="listbox" aria-label="Camadas"></div>
     <footer class="lp-footer">
       <button class="lp-button" data-cmd="duplicateLayer" title="Duplicar camada">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="6.5" y="6.5" width="10" height="10" rx="1.5"/><path d="M13.5 4.5v-1h-10v10h1"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="6.5" y="6.5" width="10" height="10" rx="1.5"/><path d="M13.5 4.5v-1h-10v10h1"/></svg>
       </button>
       <button class="lp-button" data-cmd="layerUp" title="Mover para cima">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 16V4M5 9l5-5 5 5"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 16V4M5 9l5-5 5 5"/></svg>
       </button>
       <button class="lp-button" data-cmd="layerDown" title="Mover para baixo">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4v12M5 11l5 5 5-5"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4v12M5 11l5 5 5-5"/></svg>
       </button>
       <button class="lp-button" data-cmd="mergeDown" title="Mesclar para baixo">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v9M6 8l4 4 4-4M4 16h12"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v9M6 8l4 4 4-4M4 16h12"/></svg>
       </button>
       <button class="lp-button" data-cmd="deleteLayer" title="Excluir camada">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
       </button>
     </footer>`;
   const list = panel.querySelector<HTMLElement>(".lp-list")!;

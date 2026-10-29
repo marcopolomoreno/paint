@@ -1,5 +1,5 @@
 import type { App } from "./app";
-import { clamp, context2d, type Point } from "./geometry";
+import { clamp, context2d, type Point, type Rect } from "./geometry";
 import { MAX_SIDE } from "./platform";
 
 export const MIN_ZOOM = 0.02;
@@ -54,7 +54,7 @@ export class View {
     this.grid.id = "grid";
     this.grid.hidden = true;
     this.stage.append(this.layersEl, this.grid, this.overlay, this.resizePreview);
-    for (const dir of ["e", "s", "se"]) {
+    for (const dir of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
       const handle = document.createElement("div");
       handle.className = `canvas-handle ${dir}`;
       handle.dataset.canvasHandle = dir;
@@ -213,8 +213,10 @@ export class View {
         this.viewport.scrollLeft = pan.left - (e.clientX - pan.x);
         this.viewport.scrollTop = pan.top - (e.clientY - pan.y);
       } else if (canvasResize) {
-        const size = this.canvasResizeSize(canvasResize.dir, p);
+        const size = this.canvasResizeRect(canvasResize, p);
         Object.assign(this.resizePreview.style, {
+          left: `${size.x * this.zoom}px`,
+          top: `${size.y * this.zoom}px`,
           width: `${size.w * this.zoom}px`,
           height: `${size.h * this.zoom}px`,
         });
@@ -236,11 +238,11 @@ export class View {
       if (pan) {
         pan = null;
       } else if (canvasResize) {
-        const size = this.canvasResizeSize(canvasResize.dir, this.toDoc(e.clientX, e.clientY));
+        const size = this.canvasResizeRect(canvasResize, this.toDoc(e.clientX, e.clientY));
         canvasResize = null;
         this.resizePreview.hidden = true;
         this.app.status.update();
-        if (!cancelled) this.app.resizeCanvas(size.w, size.h);
+        if (!cancelled) this.app.resizeCanvas(size.w, size.h, -size.x, -size.y);
       } else if (cancelled) {
         this.app.pointerCancel();
       } else {
@@ -257,12 +259,24 @@ export class View {
     return p.x >= 0 && p.y >= 0 && p.x < this.app.doc.width && p.y < this.app.doc.height;
   }
 
-  private canvasResizeSize(dir: string, p: Point) {
+  /**
+   * Nova área da tela ao arrastar uma alça de `start` até `p`, em coordenadas
+   * da imagem atual: as alças de cima e da esquerda acrescentam (ou cortam)
+   * espaço daquele lado.
+   */
+  private canvasResizeRect({ dir, start }: { dir: string; start: Point }, p: Point): Rect {
     const { width, height } = this.app.doc;
-    return {
-      w: dir.includes("e") ? clamp(Math.round(p.x), 1, MAX_SIDE) : width,
-      h: dir.includes("s") ? clamp(Math.round(p.y), 1, MAX_SIDE) : height,
-    };
+    const dx = Math.round(p.x - start.x);
+    const dy = Math.round(p.y - start.y);
+    let left = 0;
+    let top = 0;
+    let right = width;
+    let bottom = height;
+    if (dir.includes("e")) right = clamp(width + dx, 1, MAX_SIDE);
+    if (dir.includes("s")) bottom = clamp(height + dy, 1, MAX_SIDE);
+    if (dir.includes("w")) left = clamp(dx, width - MAX_SIDE, width - 1);
+    if (dir.includes("n")) top = clamp(dy, height - MAX_SIDE, height - 1);
+    return { x: left, y: top, w: right - left, h: bottom - top };
   }
 
   /** Cmd/Ctrl + roda e pinça no trackpad ampliam em torno do cursor. */
