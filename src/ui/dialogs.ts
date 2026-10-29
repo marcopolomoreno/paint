@@ -243,3 +243,17 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   el.append(...children);
   return el;
 }
+
+/** Aviso de trabalho em andamento sobre a janela; devolve a função que o fecha. */
+export function showBusy(message: string): () => void {
+  openModals++;
+  const overlay = element("div", "overlay busy");
+  const box = element("div", "busy-box");
+  box.append(element("div", "spinner"), document.createTextNode(message));
+  overlay.append(box);
+  document.body.append(overlay);
+  return () => {
+    openModals--;
+    overlay.remove();
+  };
+}

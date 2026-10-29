@@ -5,6 +5,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App, inTauri } from "./app";
 import { isMac } from "./platform";
 import { installHtmlMenu, installKeyboard, installNativeMenu } from "./ui/menus";
+import { installLayersPanel } from "./ui/layers";
+import { Rulers } from "./ui/rulers";
 import { StatusBar } from "./ui/statusbar";
 import { installToolbar } from "./ui/toolbar";
 
@@ -15,6 +17,13 @@ async function start() {
   app.status = new StatusBar(app, document.getElementById("statusbar")!);
   installToolbar(app, document.getElementById("ribbon")!, document.getElementById("contextbar")!);
   installTitleButtons(app);
+  installLayersPanel(app, document.getElementById("layers-panel")!);
+  app.rulers = new Rulers(
+    app,
+    document.getElementById("canvas-area")!,
+    document.getElementById("ruler-top") as HTMLCanvasElement,
+    document.getElementById("ruler-left") as HTMLCanvasElement,
+  );
   installKeyboard(app);
   app.init();
   if (import.meta.env.DEV) Object.assign(window, { app });

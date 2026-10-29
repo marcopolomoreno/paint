@@ -96,6 +96,7 @@ function toBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Prom
   );
 }
 
+/** Grava a imagem (já achatada) no formato indicado pela extensão. */
 export async function saveImage(path: string, canvas: HTMLCanvasElement) {
   const format = formatOf(path) ?? "png";
   if (format === "png" || format === "jpeg") {

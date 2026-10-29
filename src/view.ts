@@ -28,6 +28,10 @@ export class View {
   readonly viewport = document.getElementById("viewport")!;
   readonly wrap = document.createElement("div");
   readonly stage = document.createElement("div");
+  /** Canvas das camadas, de baixo para cima, com o rascunho logo acima da ativa. */
+  private readonly layersEl = document.createElement("div");
+  /** Linhas de grade sobre a imagem. */
+  readonly grid = document.createElement("div");
   /** Camada onde as ferramentas desenham antes de aplicar na imagem. */
   readonly scratch = document.createElement("canvas");
   readonly scratchCtx = context2d(this.scratch);
@@ -46,8 +50,10 @@ export class View {
     this.overlay.id = "overlay";
     this.resizePreview.className = "resize-preview";
     this.resizePreview.hidden = true;
-    app.doc.canvas.id = "doc";
-    this.stage.append(app.doc.canvas, this.scratch, this.overlay, this.resizePreview);
+    this.layersEl.id = "layers";
+    this.grid.id = "grid";
+    this.grid.hidden = true;
+    this.stage.append(this.layersEl, this.grid, this.overlay, this.resizePreview);
     for (const dir of ["e", "s", "se"]) {
       const handle = document.createElement("div");
       handle.className = `canvas-handle ${dir}`;
@@ -60,8 +66,25 @@ export class View {
     this.installZoomGestures();
   }
 
+  /** Põe na tela os canvas das camadas, na ordem e com a visibilidade atuais. */
+  syncLayers() {
+    const doc = this.app.doc;
+    const children: HTMLElement[] = [];
+    doc.layers.forEach((layer, i) => {
+      layer.canvas.classList.add("layer");
+      layer.canvas.hidden = !layer.visible;
+      children.push(layer.canvas);
+      if (i === doc.activeIndex) children.push(this.scratch);
+    });
+    const current = [...this.layersEl.children];
+    if (current.length !== children.length || current.some((el, i) => el !== children[i])) {
+      this.layersEl.replaceChildren(...children);
+    }
+  }
+
   /** Ajusta o palco ao tamanho da imagem e ao zoom. */
   layout() {
+    this.syncLayers();
     const { width, height } = this.app.doc;
     if (this.scratch.width !== width || this.scratch.height !== height) {
       this.scratch.width = width;
@@ -73,7 +96,11 @@ export class View {
     this.stage.classList.toggle("pixelated", this.zoom >= 2);
     this.app.sel.render();
     this.app.layoutOverlay();
+    this.onLayout();
   }
+
+  /** Avisado depois de cada mudança de zoom, tamanho ou rolagem (réguas e grade). */
+  onLayout: () => void = () => {};
 
   setZoom(zoom: number, anchor?: Point) {
     zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);

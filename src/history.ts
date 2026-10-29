@@ -1,16 +1,33 @@
 import type { Rect } from "./geometry";
-import type { PaintDoc } from "./doc";
+import type { Layer, LayerMeta, PaintDoc } from "./doc";
 
 /**
  * Cada passo guarda só UM estado: o "outro lado" da mudança. Desfazer troca o
- * conteúdo guardado pelo que está na imagem, e refazer troca de volta. Assim a
- * região alterada ocupa memória uma vez só, em vez de antes + depois.
+ * conteúdo guardado pelo que está no documento, e refazer troca de volta.
+ * Assim a região alterada ocupa memória uma vez só, em vez de antes + depois.
  */
-type Entry =
-  | { kind: "region"; x: number; y: number; data: ImageData }
-  | { kind: "full"; canvas: HTMLCanvasElement };
+export type Entry =
+  /** Pixels de uma região de uma camada. */
+  | { kind: "region"; layer: Layer; x: number; y: number; data: ImageData }
+  /** Canvas inteiros das camadas (girar, redimensionar, cortar): só referências, sem cópias. */
+  | { kind: "canvases"; items: { layer: Layer; canvas: HTMLCanvasElement }[]; width: number; height: number }
+  /** Lista de camadas, camada ativa, nomes e visibilidade. */
+  | { kind: "structure"; layers: Layer[]; active: number; meta: LayerMeta[] }
+  /** Vários passos que se desfazem juntos. */
+  | { kind: "group"; entries: Entry[] };
 
-const bytesOf = (e: Entry) => (e.kind === "region" ? e.data.data.byteLength : e.canvas.width * e.canvas.height * 4);
+function bytesOf(e: Entry): number {
+  switch (e.kind) {
+    case "region":
+      return e.data.data.byteLength;
+    case "canvases":
+      return e.items.reduce((sum, i) => sum + i.canvas.width * i.canvas.height * 4, 0);
+    case "structure":
+      return 1024;
+    case "group":
+      return e.entries.reduce((sum, i) => sum + bytesOf(i), 0);
+  }
+}
 
 /** Memória máxima do histórico; os passos mais antigos são descartados. */
 const MAX_BYTES = 768 * 1024 * 1024;
@@ -33,31 +50,11 @@ export class History {
   }
 
   /** Registra uma mudança já feita em `rect`; `before` é o conteúdo anterior. */
-  pushRegion(rect: Rect, before: ImageData) {
-    this.push({ kind: "region", x: rect.x, y: rect.y, data: before });
+  pushRegion(rect: Rect, before: ImageData, layer = this.doc.layer) {
+    this.push({ kind: "region", layer, x: rect.x, y: rect.y, data: before });
   }
 
-  /** Registra uma mudança da imagem inteira (tamanho, giro…); `before` é a imagem anterior. */
-  pushFull(before: HTMLCanvasElement) {
-    this.push({ kind: "full", canvas: before });
-  }
-
-  undo(): boolean {
-    return this.move(this.undoStack, this.redoStack);
-  }
-
-  redo(): boolean {
-    return this.move(this.redoStack, this.undoStack);
-  }
-
-  clear() {
-    this.undoStack = [];
-    this.redoStack = [];
-    this.bytes = 0;
-    this.onChange();
-  }
-
-  private push(entry: Entry) {
+  push(entry: Entry) {
     for (const e of this.redoStack) this.bytes -= bytesOf(e);
     this.redoStack = [];
     this.undoStack.push(entry);
@@ -68,29 +65,64 @@ export class History {
     this.onChange();
   }
 
-  private move(from: Entry[], to: Entry[]): boolean {
+  undo(): boolean {
+    return this.move(this.undoStack, this.redoStack, true);
+  }
+
+  redo(): boolean {
+    return this.move(this.redoStack, this.undoStack, false);
+  }
+
+  clear() {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.bytes = 0;
+    this.onChange();
+  }
+
+  private move(from: Entry[], to: Entry[], undo: boolean): boolean {
     const entry = from.pop();
     if (!entry) return false;
     this.bytes -= bytesOf(entry);
-    this.swap(entry);
+    this.swap(entry, undo);
     this.bytes += bytesOf(entry);
     to.push(entry);
     this.onChange();
     return true;
   }
 
-  private swap(entry: Entry) {
+  private swap(entry: Entry, undo: boolean) {
     const doc = this.doc;
-    if (entry.kind === "region") {
-      const { width, height } = entry.data;
-      const current = doc.ctx.getImageData(entry.x, entry.y, width, height);
-      doc.ctx.putImageData(entry.data, entry.x, entry.y);
-      entry.data = current;
-      doc.changed();
-    } else {
-      const current = doc.snapshot();
-      doc.replace(entry.canvas);
-      entry.canvas = current;
+    switch (entry.kind) {
+      case "region": {
+        const { width, height } = entry.data;
+        const ctx = entry.layer.ctx;
+        const current = ctx.getImageData(entry.x, entry.y, width, height);
+        ctx.putImageData(entry.data, entry.x, entry.y);
+        entry.data = current;
+        doc.changed(false, entry.layer);
+        break;
+      }
+      case "canvases": {
+        const current = entry.items.map(({ layer }) => ({ layer, canvas: layer.canvas }));
+        const size = { width: doc.width, height: doc.height };
+        doc.setCanvases(entry.items, entry.width, entry.height);
+        entry.items = current;
+        entry.width = size.width;
+        entry.height = size.height;
+        break;
+      }
+      case "structure": {
+        const current = doc.structure();
+        doc.restoreStructure(entry);
+        Object.assign(entry, current);
+        break;
+      }
+      case "group": {
+        const entries = undo ? [...entry.entries].reverse() : entry.entries;
+        for (const e of entries) this.swap(e, undo);
+        break;
+      }
     }
   }
 }

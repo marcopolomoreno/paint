@@ -29,6 +29,9 @@ const PATHS = {
   palette:
     '<circle cx="10" cy="10" r="7.5"/><circle cx="7" cy="7.5" r="1.2" fill="currentColor"/><circle cx="11" cy="6" r="1.2" fill="currentColor"/><circle cx="14" cy="9" r="1.2" fill="currentColor"/><path d="M10 17.5c-1.5 0-2-1.5-1-2.5s0-3 2-3h3"/>',
   imageSize: '<rect x="2.5" y="4.5" width="15" height="11" rx="1"/><path d="m2.5 13 4-4 3 3 2-2 6 5"/>',
+  removeBg:
+    '<path d="M7 17c0-3 1.5-4.5 3-4.5s3 1.5 3 4.5"/><circle cx="10" cy="8.5" r="2.5"/><path d="M3 6V4.5A1.5 1.5 0 0 1 4.5 3H6M14 3h1.5A1.5 1.5 0 0 1 17 4.5V6M17 14v1.5a1.5 1.5 0 0 1-1.5 1.5H14M6 17H4.5A1.5 1.5 0 0 1 3 15.5V14" stroke-dasharray="2 1.5"/>',
+  layers: '<path d="m10 3 7 3.5-7 3.5-7-3.5z"/><path d="m3 10 7 3.5 7-3.5"/><path d="m3 13.5 7 3.5 7-3.5"/>',
   cursor: '<path d="M5 3v12l3.5-3.5L11 17l2-1-2.5-5H15z"/>',
   selection: '<rect x="3" y="4" width="14" height="12" rx="1" stroke-dasharray="2.5 2"/>',
 };

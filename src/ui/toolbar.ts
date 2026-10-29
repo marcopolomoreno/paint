@@ -106,6 +106,10 @@ export function installToolbar(app: App, root: HTMLElement, contextBar: HTMLElem
     button("resize", "Redimensionar e inclinar", () => void app.run("resize")),
     rotateButton,
   );
+  const removeBg = button("removeBg", "Remover fundo", () => void app.run("removeBackground"), "Remover fundo");
+  removeBg.classList.add("tb-wide");
+  const imageBody = el("div", "tb-row");
+  imageBody.append(imageGrid, removeBg);
 
   // --- Ferramentas -----------------------------------------------------
   const toolsGrid = el("div", "tb-grid cols-3");
@@ -207,6 +211,11 @@ export function installToolbar(app: App, root: HTMLElement, contextBar: HTMLElem
   });
   sizeButton.classList.add("tb-large");
 
+  // --- Camadas ---------------------------------------------------------
+  const layersButton = button("layers", "Painel de camadas", () => void app.run("toggleLayers"));
+  layersButton.classList.add("tb-large");
+  refreshers.push(() => layersButton.classList.toggle("active", app.settings.layersPanel));
+
   // --- Cores -----------------------------------------------------------
   const slot = (n: 1 | 2) => {
     const b = el("button", "color-slot", `<span class="swatch"></span><span class="slot-label">Cor ${n}</span>`);
@@ -261,12 +270,13 @@ export function installToolbar(app: App, root: HTMLElement, contextBar: HTMLElem
 
   root.append(
     group("Seleção", selSplit),
-    group("Imagem", imageGrid),
+    group("Imagem", imageBody),
     group("Ferramentas", toolsGrid),
     group("Pincéis", brushSplit),
     group("Formas", shapesBody),
     group("Tamanho", sizeButton),
     group("Cores", colorsBody),
+    group("Camadas", layersButton),
   );
 
   installTextBar(app, contextBar, refreshers);

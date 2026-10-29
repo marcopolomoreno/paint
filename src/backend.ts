@@ -41,6 +41,9 @@ export const backend = {
     clipboard(() => invoke<void>("clipboard_write_image", bytesOf(image), { headers: sizeHeaders(image) })),
   clipboardReadText: () => clipboard(() => invoke<string | null>("clipboard_read_text")),
   clipboardWriteText: (text: string) => clipboard(() => invoke<void>("clipboard_write_text", { text })),
+  /** Máscara do "remover fundo": um byte por pixel (255 = objeto, 0 = fundo). */
+  removeBackground: async (image: ImageData) =>
+    new Uint8Array(await invoke<ArrayBuffer>("remove_background", bytesOf(image), { headers: sizeHeaders(image) })),
   takePendingFiles: () => invoke<string[]>("take_pending_files"),
   quit: () => invoke<void>("quit"),
 };

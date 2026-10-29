@@ -158,9 +158,7 @@ export class Selection {
     if (!copy) {
       this.lifted = { rect: { ...rect }, before: doc.ctx.getImageData(rect.x, rect.y, rect.w, rect.h) };
       doc.ctx.save();
-      doc.ctx.fillStyle = this.app.secondary;
-      if (this.path) doc.ctx.fill(this.pathObject());
-      else doc.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      this.clearArea(doc.ctx, rect);
       doc.ctx.restore();
       doc.changed();
     }
@@ -215,16 +213,26 @@ export class Selection {
       this.floating = null;
       this.lifted = null;
     } else {
-      const path = this.path && this.pathObject();
-      doc.edit(rect, (ctx) => {
-        ctx.fillStyle = this.app.secondary;
-        if (path) ctx.fill(path);
-        else ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-      });
+      doc.edit(rect, (ctx) => this.clearArea(ctx, rect));
     }
     this.rect = null;
     this.path = null;
     this.render();
+  }
+
+  /**
+   * Apaga a área selecionada: no fundo preenche com a cor secundária (como no
+   * Paint); nas outras camadas deixa transparente.
+   */
+  private clearArea(ctx: CanvasRenderingContext2D, rect: Rect) {
+    if (this.app.doc.onBackground) {
+      ctx.fillStyle = this.app.secondary;
+    } else {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "#000";
+    }
+    if (this.path) ctx.fill(this.pathObject());
+    else ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   }
 
   /** Pixels selecionados, como aparecem na tela (para copiar). */

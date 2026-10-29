@@ -1,3 +1,5 @@
+mod removebg;
+
 use std::{
     fs,
     io::{Cursor, Write},
@@ -190,6 +192,16 @@ fn clipboard_write_text(app: AppHandle, text: String) -> Result<(), String> {
     app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
+/// Máscara de "remover fundo" (um byte por pixel) para pixels RGBA.
+#[tauri::command]
+async fn remove_background(request: Request<'_>) -> Result<Response, String> {
+    let width = header_u32(&request, "width")?;
+    let height = header_u32(&request, "height")?;
+    let rgba = RgbaImage::from_raw(width, height, raw_body(&request)?.to_vec())
+        .ok_or("tamanho de imagem inconsistente")?;
+    removebg::mask(rgba).map(Response::new)
+}
+
 // ---------------------------------------------------------------------------
 // Arquivos pedidos pelo sistema.
 // ---------------------------------------------------------------------------
@@ -250,6 +262,7 @@ pub fn run() {
             clipboard_write_image,
             clipboard_read_text,
             clipboard_write_text,
+            remove_background,
             take_pending_files,
             quit,
         ])

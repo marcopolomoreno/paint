@@ -22,7 +22,15 @@
       </header>
       <div id="ribbon" role="toolbar" aria-label="Ferramentas"></div>
       <div id="contextbar" hidden></div>
-      <main id="viewport"></main>
+      <div id="workspace">
+        <div id="canvas-area">
+          <div id="ruler-corner"></div>
+          <canvas id="ruler-top" class="ruler"></canvas>
+          <canvas id="ruler-left" class="ruler"></canvas>
+          <main id="viewport"></main>
+        </div>
+        <aside id="layers-panel" aria-label="Camadas" hidden></aside>
+      </div>
       <footer id="statusbar"></footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -96,7 +96,7 @@ export class PickerTool implements Tool {
     const x = Math.floor(p.x);
     const y = Math.floor(p.y);
     if (x < 0 || y < 0 || x >= doc.width || y >= doc.height) return;
-    const [r, g, b, a] = doc.ctx.getImageData(x, y, 1, 1).data;
+    const [r, g, b, a] = doc.compositePixel(x, y);
     // Pixel transparente conta como branco, que é como ele aparece ao salvar.
     const mix = (c: number) => Math.round((c * a + 255 * (255 - a)) / 255);
     const hex = "#" + [mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, "0")).join("");

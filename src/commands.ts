@@ -23,13 +23,24 @@ export type CommandId =
   | "flipH"
   | "flipV"
   | "invertColors"
+  | "removeBackground"
+  | "newLayer"
+  | "duplicateLayer"
+  | "deleteLayer"
+  | "mergeDown"
+  | "layerUp"
+  | "layerDown"
+  | "flattenImage"
+  | "toggleLayers"
+  | "toggleRulers"
+  | "toggleGrid"
   | "zoomIn"
   | "zoomOut"
   | "zoomReset"
   | "zoomFit"
   | "toggleStatusBar";
 
-export type ToggleSetting = "statusBar" | "transparentSelection";
+export type ToggleSetting = "statusBar" | "transparentSelection" | "layersPanel" | "rulers" | "grid";
 
 export interface CommandItem {
   id: CommandId;
@@ -86,14 +97,32 @@ export const MENUS: MenuDef[] = [
       { id: "crop", label: "Cortar na seleção", keys: "Mod+Shift+X" },
       { id: "resize", label: "Redimensionar e inclinar…", keys: isMac ? "Mod+Alt+I" : "Mod+W" },
       "-",
-      { id: "rotateRight", label: "Girar 90° à direita", keys: "Mod+R" },
-      { id: "rotateLeft", label: "Girar 90° à esquerda", keys: "Mod+L" },
+      // No Mac, Cmd+R/Cmd+L giram como no Visualizador; no Windows Ctrl+R são as réguas, como no Paint.
+      { id: "rotateRight", label: "Girar 90° à direita", keys: isMac ? "Mod+R" : undefined },
+      { id: "rotateLeft", label: "Girar 90° à esquerda", keys: isMac ? "Mod+L" : undefined },
       { id: "rotate180", label: "Girar 180°" },
       "-",
       { id: "flipH", label: "Inverter na horizontal" },
       { id: "flipV", label: "Inverter na vertical" },
       "-",
       { id: "invertColors", label: "Inverter cores", keys: "Mod+Shift+I" },
+      { id: "removeBackground", label: "Remover fundo" },
+    ],
+  },
+  {
+    label: "Camadas",
+    items: [
+      { id: "newLayer", label: "Nova camada", keys: "Mod+Shift+N" },
+      { id: "duplicateLayer", label: "Duplicar camada", keys: "Mod+J" },
+      { id: "deleteLayer", label: "Excluir camada" },
+      "-",
+      { id: "layerUp", label: "Mover para cima", keys: "Mod+]" },
+      { id: "layerDown", label: "Mover para baixo", keys: "Mod+[" },
+      "-",
+      { id: "mergeDown", label: "Mesclar para baixo", keys: "Mod+Shift+E" },
+      { id: "flattenImage", label: "Achatar imagem" },
+      "-",
+      { id: "toggleLayers", label: "Painel de camadas", toggle: "layersPanel" },
     ],
   },
   {
@@ -104,6 +133,8 @@ export const MENUS: MenuDef[] = [
       { id: "zoomReset", label: "Tamanho real (100%)", keys: "Mod+0" },
       { id: "zoomFit", label: "Ajustar à janela", keys: "Mod+9" },
       "-",
+      { id: "toggleRulers", label: "Réguas", keys: isMac ? "Mod+Alt+R" : "Mod+R", toggle: "rulers" },
+      { id: "toggleGrid", label: "Linhas de grade", keys: isMac ? "Mod+Alt+G" : "Mod+G", toggle: "grid" },
       { id: "toggleStatusBar", label: "Barra de status", toggle: "statusBar" },
     ],
   },
@@ -118,7 +149,7 @@ const EXTRA_KEYS: [string, CommandId][] = [
 ];
 
 /** Atalhos do navegador embutido que não fazem sentido no app. */
-export const BLOCKED_KEYS = ["Mod+Shift+R", "Mod+P", "Mod+F", "Mod+G", "F5", "F7"];
+export const BLOCKED_KEYS = ["Mod+Shift+R", "Mod+P", "Mod+F", "F5", "F7"];
 
 export const KEY_BINDINGS: [string, CommandId][] = [
   ...MENUS.flatMap((menu) =>

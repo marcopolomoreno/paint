@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { backend } from "./backend";
 import { TEXT_EDIT_COMMANDS, type CommandId, type ToggleSetting } from "./commands";
-import { PaintDoc } from "./doc";
+import { PaintDoc, makeLayer } from "./doc";
 import { askOpenPath, askSavePath, fileName, isImagePath, loadImage, saveImage } from "./files";
-import { clamp, type Rect } from "./geometry";
+import { clamp, context2d, createCanvas, type Rect } from "./geometry";
 import * as ops from "./imageops";
 import { APP_NAME, DEFAULT_HEIGHT, DEFAULT_WIDTH, MAX_SIDE } from "./platform";
 import { Selection } from "./selection";
@@ -15,9 +15,10 @@ import { ShapeTool, type ShapeKind } from "./tools/shapes";
 import { TextTool, type TextOptions } from "./tools/text";
 import type { Tool, ToolId } from "./tools/tool";
 import { ZoomTool } from "./tools/zoom";
-import { askToSave, showMessage } from "./ui/dialogs";
+import { askToSave, showBusy, showMessage } from "./ui/dialogs";
 import { imageSizeDialog, resizeDialog } from "./ui/imagedialogs";
 import type { StatusBar } from "./ui/statusbar";
+import { Rulers, stepFor } from "./ui/rulers";
 import { View, type PointerInfo } from "./view";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
@@ -47,7 +48,14 @@ export class App {
   /** Qual cor os cliques na paleta mudam. */
   activeSlot: 1 | 2 = 1;
   customColors: string[] = [];
-  settings: Record<ToggleSetting, boolean> = { statusBar: true, transparentSelection: false };
+  settings: Record<ToggleSetting, boolean> = {
+    statusBar: true,
+    transparentSelection: false,
+    layersPanel: true,
+    rulers: false,
+    grid: false,
+  };
+  rulers?: Rulers;
   opts: Options = {
     selectMode: "rect",
     brush: "round",
@@ -74,6 +82,8 @@ export class App {
   };
   private readonly brushCursor = document.createElement("div");
   private uiListeners: (() => void)[] = [];
+  private pixelListeners: (() => void)[] = [];
+  private lastTitle = "";
   private lastCommand = { id: "", source: "", time: 0 };
   /** Usado pelo menu nativo para atualizar as marcas de opção. */
   onSettingsChange: () => void = () => {};
@@ -86,11 +96,21 @@ export class App {
       if (resized) this.view.layout();
       this.updateTitle();
       this.status?.update();
+      for (const listener of this.pixelListeners) listener();
+    };
+    this.doc.onLayersChange = () => {
+      this.view.syncLayers();
+      this.notify();
     };
     this.doc.history.onChange = () => this.notify();
     this.view.onCursor = (p) => {
       this.status?.setCursor(p);
+      this.rulers?.setCursor(p);
       this.updateBrushCursor(p);
+    };
+    this.view.onLayout = () => {
+      this.updateGrid();
+      this.rulers?.schedule();
     };
     this.view.onZoomChange = () => {
       this.status?.update();
@@ -109,6 +129,11 @@ export class App {
 
   notify() {
     for (const listener of this.uiListeners) listener();
+  }
+
+  /** Avisa quando os pixels mudam (miniaturas das camadas, sessão). */
+  onPixels(listener: () => void) {
+    this.pixelListeners.push(listener);
   }
 
   /** Começa com uma imagem em branco. */
@@ -231,6 +256,26 @@ export class App {
     this.text.layout();
   }
 
+  /** Troca a camada ativa (a seleção flutuante é aplicada antes, na camada dela). */
+  setActiveLayer(index: number) {
+    if (index === this.doc.activeIndex) return;
+    this.commitPending();
+    this.doc.setActive(index);
+  }
+
+  moveLayer(from: number, to: number) {
+    this.commitPending();
+    this.doc.moveLayer(from, to);
+  }
+
+  /** Linhas de grade: espaçamento em pixels da imagem que fique legível no zoom atual. */
+  updateGrid() {
+    const grid = this.view.grid;
+    const step = stepFor(this.view.zoom, 8);
+    grid.hidden = !this.settings.grid;
+    grid.style.backgroundSize = `${step * this.view.zoom}px ${step * this.view.zoom}px`;
+  }
+
   private updateBrushCursor(p: { x: number; y: number } | null) {
     const outline = p && this.tool.outline?.();
     const el = this.brushCursor;
@@ -334,6 +379,35 @@ export class App {
         return this.view.zoomFit();
       case "toggleStatusBar":
         return this.toggle("statusBar");
+      case "toggleRulers":
+        return this.toggle("rulers");
+      case "toggleGrid":
+        return this.toggle("grid");
+      case "toggleLayers":
+        return this.toggle("layersPanel");
+      case "removeBackground":
+        return this.removeBackground();
+      case "newLayer":
+        this.commitPending();
+        this.doc.addLayer();
+        if (!this.settings.layersPanel) this.toggle("layersPanel");
+        return;
+      case "duplicateLayer":
+        this.commitPending();
+        return this.doc.duplicateLayer();
+      case "deleteLayer":
+        this.commitPending();
+        return this.doc.deleteLayer();
+      case "mergeDown":
+        this.commitPending();
+        return this.doc.mergeDown();
+      case "flattenImage":
+        this.commitPending();
+        return this.doc.flatten();
+      case "layerUp":
+        return this.moveLayer(this.doc.activeIndex, this.doc.activeIndex + 1);
+      case "layerDown":
+        return this.moveLayer(this.doc.activeIndex, this.doc.activeIndex - 1);
     }
   }
 
@@ -341,6 +415,8 @@ export class App {
     this.settings[setting] = !this.settings[setting];
     if (setting === "transparentSelection") this.sel.refreshKey();
     if (setting === "statusBar") this.status.setVisible(this.settings.statusBar);
+    if (setting === "rulers") this.rulers?.setVisible(this.settings.rulers);
+    if (setting === "grid") this.updateGrid();
     this.onSettingsChange();
     this.notify();
   }
@@ -409,6 +485,8 @@ export class App {
 
   updateTitle() {
     const title = `${this.doc.dirty ? "*" : ""}${this.docName} - ${APP_NAME}`;
+    if (title === this.lastTitle) return;
+    this.lastTitle = title;
     document.title = title;
     const el = document.getElementById("doc-title");
     if (el) el.textContent = `${this.docName}${this.doc.dirty ? " •" : ""}`;
@@ -468,8 +546,7 @@ export class App {
       return;
     }
     this.discardPending();
-    this.doc.replace(canvas);
-    this.doc.history.clear();
+    this.doc.load([makeLayer("Plano de fundo", canvas)], 0);
     this.doc.path = path;
     this.doc.dirty = false;
     this.view.setZoom(this.view.fitZoom());
@@ -485,7 +562,7 @@ export class App {
     if (as || !path) path = await askSavePath(this.doc.path);
     if (!path) return false;
     try {
-      await saveImage(path, this.doc.canvas);
+      await saveImage(path, this.doc.composite());
     } catch (err) {
       await showMessage(APP_NAME, `Não foi possível salvar "${fileName(path)}".\n\n${err instanceof Error ? err.message : err}`);
       return false;
@@ -533,14 +610,17 @@ export class App {
   // Imagem
   // ------------------------------------------------------------------------
 
-  /** Aplica uma transformação à seleção, se houver, ou à imagem inteira. */
-  private imageOp(fn: (source: HTMLCanvasElement) => HTMLCanvasElement) {
+  /**
+   * Aplica uma transformação à seleção, se houver, ou a todas as camadas.
+   * `background` é a cor das áreas novas: a secundária no fundo, transparente nas outras camadas.
+   */
+  private imageOp(fn: (source: HTMLCanvasElement, background: string | null) => HTMLCanvasElement) {
     this.text.commit();
     if (this.sel.active) {
-      this.sel.transform(fn);
+      this.sel.transform((source) => fn(source, null));
       return;
     }
-    this.doc.replaceWithHistory(fn(this.doc.canvas));
+    this.doc.transformAll((source, _layer, i) => fn(source, i === 0 ? this.secondary : null));
   }
 
   resizeCanvas(width: number, height: number) {
@@ -548,7 +628,9 @@ export class App {
     width = clamp(Math.round(width), 1, MAX_SIDE);
     height = clamp(Math.round(height), 1, MAX_SIDE);
     if (width === this.doc.width && height === this.doc.height) return;
-    this.doc.replaceWithHistory(ops.resizeCanvas(this.doc.canvas, width, height, this.secondary));
+    this.doc.transformAll((source, _layer, i) =>
+      ops.resizeCanvas(source, width, height, i === 0 ? this.secondary : null),
+    );
   }
 
   private crop() {
@@ -557,11 +639,11 @@ export class App {
     this.sel.drop();
     this.sel.clear();
     if (!area) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = area.w;
-    canvas.height = area.h;
-    canvas.getContext("2d")!.drawImage(this.doc.canvas, -area.x, -area.y);
-    this.doc.replaceWithHistory(canvas);
+    this.doc.transformAll((source) => {
+      const canvas = createCanvas(area.w, area.h);
+      context2d(canvas).drawImage(source, -area.x, -area.y);
+      return canvas;
+    });
   }
 
   private async resizeImage() {
@@ -570,11 +652,39 @@ export class App {
     const result = await resizeDialog(target.w, target.h);
     if (!result) return;
     const { width, height, skewH, skewV } = result;
-    const onSelection = this.sel.active;
-    this.imageOp((source) => {
+    this.imageOp((source, background) => {
       const resized = width === source.width && height === source.height ? source : ops.resample(source, width, height);
-      return ops.skew(resized, skewH, skewV, onSelection ? null : this.secondary);
+      return ops.skew(resized, skewH, skewV, background);
     });
+  }
+
+  /**
+   * Remove o fundo da camada ativa (ou só da área selecionada) com o modelo
+   * local: os pixels de fundo ficam transparentes.
+   */
+  private async removeBackground() {
+    if (!inTauri) {
+      await showMessage(APP_NAME, "Remover fundo só funciona no aplicativo.");
+      return;
+    }
+    const selected = this.sel.rect;
+    this.commitPending();
+    const area = this.doc.clip(selected ?? this.doc.bounds);
+    if (!area) return;
+    this.sel.clear();
+    const layer = this.doc.layer;
+    const pixels = layer.ctx.getImageData(area.x, area.y, area.w, area.h);
+    const done = showBusy("Removendo o fundo…");
+    let mask: Uint8Array;
+    try {
+      mask = await backend.removeBackground(pixels);
+    } finally {
+      done();
+    }
+    if (layer !== this.doc.layer) return;
+    const d = pixels.data;
+    for (let i = 0; i < mask.length; i++) d[i * 4 + 3] = Math.round((d[i * 4 + 3] * mask[i]) / 255);
+    this.doc.edit(area, (ctx) => ctx.putImageData(pixels, area.x, area.y));
   }
 
   private async imageProperties() {
