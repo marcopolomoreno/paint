@@ -1,6 +1,6 @@
 import type { App } from "../app";
-import { clamp, rectFromPoints, type Point, type Rect } from "../geometry";
-import type { Handle } from "../selection";
+import { centerOf, clamp, rectFromPoints, type Point, type Rect } from "../geometry";
+import { dragAngle, resizeRotated, ROTATE, type Handle } from "../transform";
 import type { PointerInfo } from "../view";
 import type { Tool } from "./tool";
 
@@ -9,7 +9,8 @@ export type SelectMode = "rect" | "free";
 type Drag =
   | { kind: "draw"; start: Point; points: Point[] }
   | { kind: "move"; start: Point; origin: Rect; copy: boolean; moved: boolean }
-  | { kind: "resize"; handle: Handle; origin: Rect; start: Point };
+  | { kind: "resize"; handle: Handle; origin: Rect; start: Point }
+  | { kind: "rotate"; start: Point; angle: number };
 
 export class SelectTool implements Tool {
   cursor = "crosshair";
@@ -19,7 +20,9 @@ export class SelectTool implements Tool {
 
   down(p: PointerInfo) {
     const sel = this.app.sel;
-    if (sel.active && p.handle) {
+    if (sel.active && p.handle === ROTATE) {
+      this.drag = { kind: "rotate", start: p, angle: sel.angle };
+    } else if (sel.active && p.handle) {
       this.drag = { kind: "resize", handle: p.handle as Handle, origin: { ...sel.rect! }, start: p };
     } else if (sel.active && sel.contains(p)) {
       // Ctrl/Cmd (ou Option) + arrastar copia em vez de mover.
@@ -54,9 +57,11 @@ export class SelectTool implements Tool {
         sel.lift(drag.copy);
       }
       sel.moveTo(drag.origin.x + dx, drag.origin.y + dy);
+    } else if (drag.kind === "rotate") {
+      sel.rotateTo(dragAngle(centerOf(sel.rect!), drag.start, p, drag.angle, p.shift));
     } else {
       sel.lift();
-      sel.resizeTo(resizeRect(drag.origin, drag.handle, p.x - drag.start.x, p.y - drag.start.y, p.shift));
+      sel.resizeTo(resizeRotated(drag.origin, sel.angle, drag.handle, drag.start, p, p.shift));
     }
   }
 
@@ -102,24 +107,3 @@ export class SelectTool implements Tool {
   }
 }
 
-/** Novo retângulo ao arrastar uma alça. Shift mantém a proporção. */
-function resizeRect(r: Rect, handle: Handle, dx: number, dy: number, keepRatio: boolean): Rect {
-  let left = r.x;
-  let top = r.y;
-  let right = r.x + r.w;
-  let bottom = r.y + r.h;
-  if (handle.includes("w")) left += dx;
-  if (handle.includes("e")) right += dx;
-  if (handle.includes("n")) top += dy;
-  if (handle.includes("s")) bottom += dy;
-  let w = Math.max(1, Math.abs(right - left));
-  let h = Math.max(1, Math.abs(bottom - top));
-  if (keepRatio && handle.length === 2) {
-    const scale = Math.max(w / r.w, h / r.h);
-    w = Math.max(1, r.w * scale);
-    h = Math.max(1, r.h * scale);
-    if (handle.includes("w")) left = right - w;
-    if (handle.includes("n")) top = bottom - h;
-  }
-  return { x: Math.min(left, right), y: Math.min(top, bottom), w, h };
-}

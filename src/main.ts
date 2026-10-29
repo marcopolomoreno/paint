@@ -66,10 +66,11 @@ async function start() {
 function installTitleButtons(app: App) {
   const undo = document.getElementById("tb-undo") as HTMLButtonElement;
   const redo = document.getElementById("tb-redo") as HTMLButtonElement;
+  document.getElementById("tb-save")!.addEventListener("click", () => void app.run("save"));
   undo.addEventListener("click", () => void app.run("undo"));
   redo.addEventListener("click", () => void app.run("redo"));
   app.onUi(() => {
-    undo.disabled = !app.doc.history.canUndo && !app.sel.isFloating;
+    undo.disabled = !app.doc.history.canUndo && !app.hasPending;
     redo.disabled = !app.doc.history.canRedo;
   });
 }

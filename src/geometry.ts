@@ -50,6 +50,43 @@ export function boundsOf(points: Point[], margin = 0): Rect {
   return { x: minX - margin, y: minY - margin, w: maxX - minX + 2 * margin, h: maxY - minY + 2 * margin };
 }
 
+export const centerOf = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+/** Gira `p` em torno de `c` (ângulo em radianos, sentido horário na tela). */
+export function rotateAround(p: Point, c: Point, angle: number): Point {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+}
+
+/** Cantos do retângulo girado em torno do centro (nw, ne, se, sw). */
+export function rotatedCorners(r: Rect, angle: number): Point[] {
+  const c = centerOf(r);
+  const corners = [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x + r.w, y: r.y + r.h },
+    { x: r.x, y: r.y + r.h },
+  ];
+  return angle ? corners.map((p) => rotateAround(p, c, angle)) : corners;
+}
+
+/** Retângulo de cantos inteiros que contém o retângulo girado. */
+export function rotatedBounds(r: Rect, angle: number): Rect {
+  return snapRect(boundsOf(rotatedCorners(r, angle)));
+}
+
+/** Distância de `p` ao segmento `a`–`b`. */
+export function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0, 1) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
 export function pointInRect(p: Point, r: Rect): boolean {
   return p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h;
 }

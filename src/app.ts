@@ -42,6 +42,9 @@ export class App {
   readonly doc = new PaintDoc();
   readonly view = new View(this);
   readonly sel = new Selection(this);
+  // Antes das ferramentas, que se inscrevem nelas.
+  private uiListeners: (() => void)[] = [];
+  private pixelListeners: (() => void)[] = [];
   status!: StatusBar;
 
   primary = "#000000";
@@ -71,6 +74,7 @@ export class App {
   toolId: ToolId = "pencil";
   private previousTool: ToolId = "pencil";
   readonly text = new TextTool(this);
+  readonly shapes = new ShapeTool(this);
   private readonly tools: Record<ToolId, Tool> = {
     select: new SelectTool(this),
     pencil: new PencilTool(this, false),
@@ -79,12 +83,10 @@ export class App {
     fill: new FillTool(this),
     picker: new PickerTool(this),
     text: this.text,
-    shape: new ShapeTool(this),
+    shape: this.shapes,
     zoom: new ZoomTool(this),
   };
   private readonly brushCursor = document.createElement("div");
-  private uiListeners: (() => void)[] = [];
-  private pixelListeners: (() => void)[] = [];
   private lastTitle = "";
   private lastCommand = { id: "", source: "", time: 0 };
   /** Usado pelo menu nativo para atualizar as marcas de opção. */
@@ -291,14 +293,26 @@ export class App {
     this.view.clearScratch();
   }
 
-  /** Conclui o que estiver pendente (texto sendo digitado, seleção flutuante). */
+  /** Conclui o que estiver pendente (texto sendo digitado, forma recém-desenhada, seleção flutuante). */
   commitPending() {
-    this.text.commit();
+    this.commitDrawing();
     if (this.sel.isFloating) this.sel.drop();
+  }
+
+  /** Aplica o texto sendo digitado e a forma recém-desenhada. */
+  commitDrawing() {
+    this.text.commit();
+    this.shapes.commit();
+  }
+
+  /** Há algo ainda não aplicado à imagem (desfazer o descarta). */
+  get hasPending() {
+    return this.sel.isFloating || this.shapes.isPending;
   }
 
   layoutOverlay() {
     this.text.layout();
+    this.shapes.layout();
   }
 
   /** Troca a camada ativa (a seleção flutuante é aplicada antes, na camada dela). */
@@ -471,6 +485,7 @@ export class App {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (e.key === "Escape") {
       this.tool.cancel?.();
+      this.shapes.commit();
       this.sel.drop();
       return true;
     }
@@ -550,6 +565,7 @@ export class App {
 
   private discardPending() {
     this.text.cancel();
+    this.shapes.discard();
     this.tool.cancel?.();
     this.sel.clear();
   }
@@ -645,7 +661,7 @@ export class App {
   // ------------------------------------------------------------------------
 
   private async copy(): Promise<boolean> {
-    this.text.commit();
+    this.commitDrawing();
     const pixels = this.sel.pixels();
     if (!pixels) return false;
     await backend.clipboardWriteImage(pixels);
@@ -678,7 +694,7 @@ export class App {
    * `background` é a cor das áreas novas: a secundária no fundo, transparente nas outras camadas.
    */
   private imageOp(fn: (source: HTMLCanvasElement, background: string | null) => HTMLCanvasElement) {
-    this.text.commit();
+    this.commitDrawing();
     if (this.sel.active) {
       this.sel.transform((source) => fn(source, null));
       return;
@@ -698,7 +714,7 @@ export class App {
 
   private crop() {
     if (!this.sel.active) return;
-    const area = this.doc.clip(this.sel.rect!);
+    const area = this.doc.clip(this.sel.bounds()!);
     this.sel.drop();
     this.sel.clear();
     if (!area) return;
@@ -710,8 +726,8 @@ export class App {
   }
 
   private async resizeImage() {
-    this.text.commit();
-    const target = this.sel.rect ?? this.doc.bounds;
+    this.commitDrawing();
+    const target = this.sel.bounds() ?? this.doc.bounds;
     const result = await resizeDialog(target.w, target.h);
     if (!result) return;
     const { width, height, skewH, skewV } = result;

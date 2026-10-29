@@ -1,5 +1,14 @@
 import type { App } from "../app";
-import { boundsOf, rectFromPoints, type Point, type Rect } from "../geometry";
+import {
+  boundsOf,
+  centerOf,
+  distanceToSegment,
+  rectFromPoints,
+  rotatedCorners,
+  type Point,
+  type Rect,
+} from "../geometry";
+import { dragAngle, resizeRotated, ROTATE, TransformBox, unrotate, type Handle } from "../transform";
 import type { PointerInfo } from "../view";
 import type { Tool } from "./tool";
 
@@ -190,103 +199,254 @@ export function shapeIconPath(kind: ShapeKind, size = 16): string {
   return parts.join("");
 }
 
+
+/** Forma recém-desenhada, ainda editável. */
+type Pending =
+  | { type: "line"; shape: ShapeKind; a: Point; b: Point; button: number }
+  | { type: "box"; shape: ShapeKind; rect: Rect; angle: number; button: number };
+
+type Drag =
+  | { kind: "draw"; start: Point; button: number }
+  | { kind: "move"; start: Point; origin: Pending }
+  | { kind: "resize"; handle: Handle; start: Point; origin: Rect }
+  | { kind: "rotate"; start: Point; angle: number }
+  | { kind: "end"; index: 0 | 1 };
+
+const isLineShape = (shape: ShapeKind) => shape === "line" || shape === "arrow";
+const roundPoint = (p: Point): Point => ({ x: Math.round(p.x), y: Math.round(p.y) });
+
+/** Shift: linhas a cada 45°, formas com largura igual à altura. */
+function constrain(a: Point, b: Point, isLine: boolean, shift: boolean): Point {
+  if (!shift) return b;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (isLine) {
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    const len = Math.hypot(dx, dy);
+    return { x: Math.round(a.x + Math.cos(angle) * len), y: Math.round(a.y + Math.sin(angle) * len) };
+  }
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return { x: a.x + Math.sign(dx || 1) * side, y: a.y + Math.sign(dy || 1) * side };
+}
+
+/**
+ * Formas. Como no Paint, a forma recém-desenhada continua editável (alças
+ * para mover, redimensionar e girar; nas linhas, para mover as pontas), e
+ * mudanças de cor, espessura e preenchimento valem para ela, até um clique
+ * fora, a troca de ferramenta ou outro comando, quando é aplicada à imagem.
+ */
 export class ShapeTool implements Tool {
   cursor = "crosshair";
-  private start: Point | null = null;
-  private button = 0;
-  private lastBounds: Rect | null = null;
+  private pending: Pending | null = null;
+  private drag: Drag | null = null;
+  private readonly box: TransformBox;
 
-  constructor(private app: App) {}
+  constructor(private app: App) {
+    this.box = new TransformBox(app.view.overlay, true);
+    app.onUi(() => this.refresh());
+  }
+
+  get isPending() {
+    return this.pending !== null;
+  }
 
   down(p: PointerInfo) {
-    this.start = { x: Math.round(p.x), y: Math.round(p.y) };
-    this.button = p.button;
-    this.draw(p);
+    const pending = this.pending;
+    if (pending) {
+      const handle = p.handle;
+      if (handle === ROTATE && pending.type === "box") {
+        this.drag = { kind: "rotate", start: p, angle: pending.angle };
+        return;
+      }
+      if (handle === "p0" || handle === "p1") {
+        this.drag = { kind: "end", index: handle === "p0" ? 0 : 1 };
+        return;
+      }
+      if (handle && pending.type === "box") {
+        this.drag = { kind: "resize", handle: handle as Handle, start: p, origin: { ...pending.rect } };
+        return;
+      }
+      if (this.hit(p)) {
+        this.drag = { kind: "move", start: p, origin: structuredClone(pending) };
+        return;
+      }
+      this.commit();
+    }
+    this.drag = { kind: "draw", start: roundPoint(p), button: p.button };
   }
 
   move(p: PointerInfo) {
-    if (this.start) this.draw(p);
+    const drag = this.drag;
+    if (!drag) return;
+    if (drag.kind === "draw") {
+      const shape = this.app.opts.shape;
+      const a = drag.start;
+      const b = constrain(a, roundPoint(p), isLineShape(shape), p.shift);
+      const button = drag.button;
+      if (a.x === b.x && a.y === b.y) this.pending = null;
+      else if (isLineShape(shape)) this.pending = { type: "line", shape, a, b, button };
+      else this.pending = { type: "box", shape, rect: rectFromPoints(a, b), angle: 0, button };
+      return this.render();
+    }
+    const pending = this.pending;
+    if (!pending) return;
+    if (drag.kind === "move") {
+      const dx = Math.round(p.x - drag.start.x);
+      const dy = Math.round(p.y - drag.start.y);
+      const o = drag.origin;
+      if (pending.type === "line" && o.type === "line") {
+        pending.a = { x: o.a.x + dx, y: o.a.y + dy };
+        pending.b = { x: o.b.x + dx, y: o.b.y + dy };
+      } else if (pending.type === "box" && o.type === "box") {
+        pending.rect = { ...o.rect, x: o.rect.x + dx, y: o.rect.y + dy };
+      }
+    } else if (drag.kind === "end" && pending.type === "line") {
+      const q = constrain(drag.index ? pending.a : pending.b, roundPoint(p), true, p.shift);
+      if (drag.index) pending.b = q;
+      else pending.a = q;
+    } else if (drag.kind === "resize" && pending.type === "box") {
+      const r = resizeRotated(drag.origin, pending.angle, drag.handle, drag.start, p, p.shift);
+      // Sem giro, os cantos ficam em pixels inteiros (contorno nítido).
+      pending.rect = pending.angle ? r : toPixels(r);
+    } else if (drag.kind === "rotate" && pending.type === "box") {
+      pending.angle = dragAngle(centerOf(pending.rect), drag.start, p, drag.angle, p.shift);
+    }
+    this.render();
   }
 
-  up(p: PointerInfo) {
-    if (!this.start) return;
-    this.draw(p);
-    if (this.lastBounds) this.app.commitScratch(this.lastBounds);
-    else this.app.view.clearScratch();
-    this.start = null;
-    this.lastBounds = null;
+  up() {
+    if (!this.drag) return;
+    this.drag = null;
+    this.layout();
+    // O botão Desfazer passa a valer para a forma pendente.
+    this.app.notify();
+  }
+
+  hover(p: PointerInfo) {
+    this.app.view.setCursor(this.pending && this.hit(p) ? "move" : "crosshair");
   }
 
   cancel() {
-    this.start = null;
-    this.lastBounds = null;
-    this.app.view.clearScratch();
+    if (this.drag?.kind === "draw") this.pending = null;
+    this.drag = null;
+    this.render();
   }
 
-  /** Redesenha a forma no rascunho, do ponto inicial até `p`. */
-  private draw(p: PointerInfo) {
+  /** Aplica a forma pendente na imagem (um passo de desfazer). */
+  commit() {
+    const pending = this.pending;
+    if (!pending) return;
+    this.pending = null;
+    this.drag = null;
+    this.box.hide();
+    this.paint(pending);
+    this.app.commitScratch(this.bounds(pending));
+  }
+
+  /** Esquece a forma pendente (outra imagem foi aberta). */
+  discard() {
+    this.pending = null;
+    this.drag = null;
+    this.render();
+  }
+
+  /** Reposiciona as alças (o zoom mudou). */
+  layout() {
+    const pending = this.pending;
+    const zoom = this.app.view.zoom;
+    if (!pending || this.drag?.kind === "draw") this.box.hide();
+    else if (pending.type === "line") this.box.showEnds([pending.a, pending.b], zoom);
+    else this.box.showBox(pending.rect, pending.angle, zoom);
+  }
+
+  /** Cor, espessura, contorno ou preenchimento mudaram: redesenha. Outra forma escolhida: aplica esta. */
+  private refresh() {
+    const pending = this.pending;
+    if (!pending || this.drag || this.app.toolId !== "shape") return;
+    if (this.app.opts.shape !== pending.shape) this.commit();
+    else this.render();
+  }
+
+  private render() {
+    if (this.pending) this.paint(this.pending);
+    else this.app.view.clearScratch();
+    this.layout();
+  }
+
+  /** O ponto está sobre a forma (ou perto o bastante para arrastá-la)? */
+  private hit(p: Point): boolean {
+    const pending = this.pending!;
+    const tol = Math.max(this.app.opts.sizes.shape / 2, 4 / this.app.view.zoom);
+    if (pending.type === "line") return distanceToSegment(p, pending.a, pending.b) <= tol;
+    const r = pending.rect;
+    const q = unrotate(p, r, pending.angle);
+    return q.x >= r.x - tol && q.y >= r.y - tol && q.x <= r.x + r.w + tol && q.y <= r.y + r.h + tol;
+  }
+
+  private bounds(pending: Pending): Rect {
+    const width = this.app.opts.sizes.shape;
+    const margin = width * 2 + 2;
+    if (pending.type === "line") {
+      return boundsOf([pending.a, pending.b], margin + (pending.shape === "arrow" ? arrowLength(width) : 0));
+    }
+    return boundsOf(rotatedCorners(pending.rect, pending.angle), margin);
+  }
+
+  /** Desenha a forma no rascunho. */
+  private paint(pending: Pending) {
     const app = this.app;
-    const { shape, outline, fill } = app.opts;
+    const { outline, fill } = app.opts;
     const view = app.view;
     view.clearScratch();
-    const a = this.start!;
-    let b = { x: Math.round(p.x), y: Math.round(p.y) };
-    const isLine = shape === "line" || shape === "arrow";
-
-    // Shift: linhas a cada 45°, formas com largura igual à altura.
-    if (p.shift) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      if (isLine) {
-        const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-        const len = Math.hypot(dx, dy);
-        b = { x: Math.round(a.x + Math.cos(angle) * len), y: Math.round(a.y + Math.sin(angle) * len) };
-      } else {
-        const side = Math.max(Math.abs(dx), Math.abs(dy));
-        b = { x: a.x + Math.sign(dx || 1) * side, y: a.y + Math.sign(dy || 1) * side };
-      }
-    }
-    if (a.x === b.x && a.y === b.y) {
-      this.lastBounds = null;
-      return;
-    }
-
     // Botão direito troca as cores, como no Paint.
-    const stroke = app.colorFor(this.button);
-    const fillColor = app.colorFor(this.button === 2 ? 0 : 2);
+    const stroke = app.colorFor(pending.button);
+    const fillColor = app.colorFor(pending.button === 2 ? 0 : 2);
     const width = app.opts.sizes.shape;
     const ctx = view.scratchCtx;
+    ctx.save();
     ctx.lineWidth = width;
     ctx.strokeStyle = stroke;
     ctx.lineCap = "round";
-    ctx.lineJoin = shape === "rect" || shape === "diamond" ? "miter" : "round";
+    ctx.lineJoin = pending.shape === "rect" || pending.shape === "diamond" ? "miter" : "round";
     ctx.miterLimit = 4;
     ctx.beginPath();
 
-    let margin = width * 2 + 2;
-    if (isLine) {
+    if (pending.type === "line") {
+      const { a, b } = pending;
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
-      if (shape === "arrow") {
+      if (pending.shape === "arrow") {
         ctx.beginPath();
         arrowHead(ctx, a, b, arrowLength(width));
         ctx.fillStyle = stroke;
         ctx.fill();
         ctx.stroke();
-        margin += arrowLength(width);
       }
     } else {
+      const r = pending.rect;
+      if (pending.angle) {
+        const c = centerOf(r);
+        ctx.translate(c.x, c.y);
+        ctx.rotate(pending.angle);
+        ctx.translate(-c.x, -c.y);
+      }
       // Contorno ímpar fica nítido no meio do pixel.
-      const offset = outline === "solid" && width % 2 === 1 ? 0.5 : 0;
-      const r = rectFromPoints(a, b);
-      closedShape(ctx, shape, { x: r.x + offset, y: r.y + offset, w: r.w, h: r.h });
+      const offset = outline === "solid" && width % 2 === 1 && !pending.angle ? 0.5 : 0;
+      closedShape(ctx, pending.shape, { x: r.x + offset, y: r.y + offset, w: r.w, h: r.h });
       if (fill === "solid") {
         ctx.fillStyle = fillColor;
         ctx.fill();
       }
       if (outline === "solid") ctx.stroke();
     }
-    this.lastBounds = boundsOf([a, b], margin);
+    ctx.restore();
   }
 }
+
+const toPixels = (r: Rect): Rect => ({
+  x: Math.round(r.x),
+  y: Math.round(r.y),
+  w: Math.max(1, Math.round(r.w)),
+  h: Math.max(1, Math.round(r.h)),
+});

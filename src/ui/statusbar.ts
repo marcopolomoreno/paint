@@ -6,6 +6,9 @@ import { icon } from "./icons";
 
 const ZOOM_PRESETS = [0.125, 0.25, 0.5, 1, 2, 4, 8];
 
+/** Giro da seleção em graus (0 a 359), se houver. */
+const angleText = (a: number) => (a ? ` · ${(Math.round((a * 180) / Math.PI) + 360) % 360}°` : "");
+
 const formatZoom = (z: number) => `${Math.round(z * 1000) / 10}%`;
 
 /** Barra de status: posição do cursor, seleção, tamanho da imagem e zoom. */
@@ -88,7 +91,7 @@ export class StatusBar {
     this.selection.textContent = draft
       ? `${Math.round(draft[0])} × ${Math.round(draft[1])}px`
       : rect
-        ? `${rect.w} × ${rect.h}px`
+        ? `${Math.round(rect.w)} × ${Math.round(rect.h)}px` + angleText(app.sel.angle)
         : "";
     this.size.textContent = `${app.doc.width} × ${app.doc.height}px`;
     this.zoomLabel.textContent = formatZoom(app.view.zoom);

@@ -18,6 +18,15 @@
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.06);
   --page-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 
+  /* Detalhes coloridos dos ícones. */
+  --ic-blue: #1a73d9;
+  --ic-red: #e0403a;
+  --ic-yellow: #f6b73c;
+  --ic-pink: #f290a8;
+  --ic-wood: #f5dcb4;
+  --ic-brown: #b0703f;
+  --ic-gray: #8c8c8c;
+
   color-scheme: light dark;
 }
 
@@ -39,8 +48,26 @@
     --menu-hover: rgba(255, 255, 255, 0.08);
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
     --page-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+    --ic-blue: #4fa8ff;
+    --ic-red: #ff6b61;
+    --ic-yellow: #f4c04e;
+    --ic-pink: #f39ab0;
+    --ic-wood: #e8cfa6;
+    --ic-brown: #c98a55;
+    --ic-gray: #a8a8a8;
   }
 }
+
+.icon .f-blue { fill: var(--ic-blue); }
+.icon .f-blue-soft { fill: color-mix(in srgb, var(--ic-blue) 22%, transparent); }
+.icon .f-red { fill: var(--ic-red); }
+.icon .f-yellow { fill: var(--ic-yellow); }
+.icon .f-pink { fill: var(--ic-pink); }
+.icon .f-wood { fill: var(--ic-wood); }
+.icon .f-brown { fill: var(--ic-brown); }
+.icon .s-blue { stroke: var(--ic-blue); }
+.icon .s-red { stroke: var(--ic-red); }
+.icon .s-gray { stroke: var(--ic-gray); }
 
 * {
   box-sizing: border-box;
@@ -115,6 +142,17 @@ body.mac #titlebar {
 
 .title-button:disabled {
   opacity: 0.35;
+}
+
+/* Separadores como no Paint: menus | salvar | desfazer e refazer. */
+.title-sep,
+body:not(.mac) .title-actions::before {
+  content: "";
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--control-border);
 }
 
 #doc-title {
@@ -674,6 +712,33 @@ body.mac #menubar {
 .sel-handle.e,
 .sel-handle.w {
   cursor: ew-resize;
+}
+
+/* Pontas de uma linha recém-desenhada. */
+.sel-handle.end {
+  cursor: move;
+}
+
+/* Alça de girar, acima do lado de cima. */
+.sel-rotate {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+  cursor: grab;
+}
+
+.sel-rotate:active {
+  cursor: grabbing;
+}
+
+.sel-rotate svg {
+  pointer-events: none;
 }
 
 .canvas-handle {

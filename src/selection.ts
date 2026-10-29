@@ -1,9 +1,23 @@
 import type { App } from "./app";
-import { boundsOf, context2d, createCanvas, intersect, parseHex, snapRect, union, type Point, type Rect } from "./geometry";
+import {
+  boundsOf,
+  centerOf,
+  context2d,
+  createCanvas,
+  intersect,
+  parseHex,
+  pointInRect,
+  rotateAround,
+  rotatedBounds,
+  rotatedCorners,
+  snapRect,
+  union,
+  type Point,
+  type Rect,
+} from "./geometry";
+import { TransformBox, unrotate } from "./transform";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-export const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
-export type Handle = (typeof HANDLES)[number];
 
 /**
  * Seleção retangular ou livre. Enquanto está "parada" é só uma área marcada;
@@ -12,8 +26,10 @@ export type Handle = (typeof HANDLES)[number];
  * seleção é solta.
  */
 export class Selection {
-  /** Posição e tamanho atuais, em pixels da imagem. */
+  /** Posição e tamanho atuais (antes do giro), em pixels da imagem. */
   rect: Rect | null = null;
+  /** Giro livre dos pixels flutuantes em torno do centro de `rect`, em radianos. */
+  angle = 0;
   /** Contorno da seleção livre, nas coordenadas de `pathRect`. */
   private path: Point[] | null = null;
   private pathRect: Rect | null = null;
@@ -27,7 +43,7 @@ export class Selection {
   private readonly svg = document.createElementNS(SVG_NS, "svg");
   private readonly outline = document.createElementNS(SVG_NS, "path");
   private readonly outlineDash = document.createElementNS(SVG_NS, "path");
-  private readonly handles: HTMLElement[];
+  private readonly box: TransformBox;
   private draft: Rect | Point[] | null = null;
 
   constructor(private app: App) {
@@ -36,13 +52,8 @@ export class Selection {
     this.outline.classList.add("sel-line");
     this.outlineDash.classList.add("sel-ants");
     this.svg.append(this.outline, this.outlineDash);
-    this.handles = HANDLES.map((h) => {
-      const el = document.createElement("div");
-      el.className = `sel-handle ${h}`;
-      el.dataset.selHandle = h;
-      return el;
-    });
-    app.view.overlay.append(this.floatEl, this.svg, ...this.handles);
+    app.view.overlay.append(this.floatEl, this.svg);
+    this.box = new TransformBox(app.view.overlay, false);
     this.render();
   }
 
@@ -57,6 +68,7 @@ export class Selection {
   /** Define uma nova área (retângulo ou contorno livre), soltando a anterior. */
   set(area: Rect | Point[]) {
     this.drop();
+    this.angle = 0;
     const doc = this.app.doc;
     if (Array.isArray(area)) {
       if (area.length < 3) return this.clear();
@@ -81,7 +93,7 @@ export class Selection {
 
   contains(p: Point): boolean {
     const r = this.rect;
-    if (!r || p.x < r.x || p.y < r.y || p.x >= r.x + r.w || p.y >= r.y + r.h) return false;
+    if (!r || !pointInRect(unrotate(p, r, this.angle), r)) return false;
     if (!this.path || this.floating) return true;
     const ctx = this.app.view.scratchCtx;
     return ctx.isPointInPath(this.pathObject(), p.x, p.y);
@@ -91,9 +103,15 @@ export class Selection {
   clear() {
     if (this.floating) this.drop();
     this.rect = null;
+    this.angle = 0;
     this.path = null;
     this.pathRect = null;
     this.render();
+  }
+
+  /** Retângulo de cantos inteiros que contém a seleção (já girada). */
+  bounds(): Rect | null {
+    return this.rect && rotatedBounds(this.rect, this.angle);
   }
 
   /** Aplica os pixels flutuantes na imagem e encerra a seleção. */
@@ -102,13 +120,14 @@ export class Selection {
     const rect = this.rect;
     if (!floating || !rect) {
       this.rect = null;
+      this.angle = 0;
       this.path = null;
       this.render();
       return;
     }
     const doc = this.app.doc;
     const lifted = this.lifted;
-    const dest = doc.clip(rect);
+    const dest = doc.clip(this.bounds()!);
     const area = dest && lifted ? union(dest, lifted.rect) : (dest ?? lifted?.rect ?? null);
     if (area) {
       // O "antes" é a imagem atual (com o buraco) com a origem restaurada.
@@ -121,8 +140,7 @@ export class Selection {
       }
       const ctx = doc.ctx;
       ctx.save();
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(this.display(), rect.x, rect.y, rect.w, rect.h);
+      this.drawFloating(ctx, this.display());
       ctx.restore();
       doc.history.pushRegion(area, before);
       doc.changed();
@@ -131,8 +149,19 @@ export class Selection {
     this.lifted = null;
     this.keyed = null;
     this.rect = null;
+    this.angle = 0;
     this.path = null;
     this.render();
+  }
+
+  /** Desenha `source` esticado até `rect` e girado em torno do centro, em coordenadas da imagem. */
+  private drawFloating(ctx: CanvasRenderingContext2D, source: HTMLCanvasElement) {
+    const r = this.rect!;
+    const c = centerOf(r);
+    ctx.imageSmoothingQuality = "high";
+    ctx.translate(c.x, c.y);
+    ctx.rotate(this.angle);
+    ctx.drawImage(source, -r.w / 2, -r.h / 2, r.w, r.h);
   }
 
   /**
@@ -171,18 +200,30 @@ export class Selection {
     this.floating = source;
     this.lifted = null;
     this.keyed = null;
+    this.angle = 0;
     this.rect = { x: at.x, y: at.y, w: source.width, h: source.height };
     this.render();
   }
 
   moveTo(x: number, y: number) {
     if (!this.rect) return;
-    this.rect = { ...this.rect, x: Math.round(x), y: Math.round(y) };
+    // Girada, a posição não precisa cair em pixel inteiro.
+    const snap = this.angle ? (n: number) => n : Math.round;
+    this.rect = { ...this.rect, x: snap(x), y: snap(y) };
     this.render();
   }
 
   resizeTo(rect: Rect) {
-    this.rect = snapRect(rect);
+    this.rect = this.angle ? rect : snapRect(rect);
+    this.render();
+  }
+
+  /** Gira os pixels selecionados (levantando-os, se preciso). */
+  rotateTo(angle: number) {
+    if (!this.rect) return;
+    this.lift();
+    if (!angle) this.rect = snapRect(this.rect);
+    this.angle = angle;
     this.render();
   }
 
@@ -190,6 +231,7 @@ export class Selection {
   transform(fn: (source: HTMLCanvasElement) => HTMLCanvasElement) {
     if (!this.rect) return;
     this.lift();
+    this.bakeRotation();
     const result = fn(this.bakedFloating());
     // O contorno livre não acompanha a transformação; a transparência já guarda o formato.
     this.path = null;
@@ -216,6 +258,7 @@ export class Selection {
       doc.edit(rect, (ctx) => this.clearArea(ctx, rect));
     }
     this.rect = null;
+    this.angle = 0;
     this.path = null;
     this.render();
   }
@@ -240,11 +283,11 @@ export class Selection {
     const rect = this.rect;
     if (!rect) return null;
     if (this.floating) {
-      const canvas = createCanvas(rect.w, rect.h);
-      const ctx = context2d(canvas);
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(this.display(), 0, 0, rect.w, rect.h);
-      return ctx.getImageData(0, 0, rect.w, rect.h);
+      const b = this.bounds()!;
+      const ctx = context2d(createCanvas(b.w, b.h));
+      ctx.translate(-b.x, -b.y);
+      this.drawFloating(ctx, this.display());
+      return ctx.getImageData(0, 0, b.w, b.h);
     }
     const doc = this.app.doc;
     const area = intersect(rect, doc.bounds);
@@ -278,6 +321,7 @@ export class Selection {
         top: `${rect.y * zoom}px`,
         width: `${rect.w * zoom}px`,
         height: `${rect.h * zoom}px`,
+        transform: this.angle ? `rotate(${this.angle}rad)` : "",
       });
     }
 
@@ -286,16 +330,8 @@ export class Selection {
     this.outlineDash.setAttribute("d", d);
     this.svg.style.display = d ? "" : "none";
 
-    const showHandles = !!rect && !this.draft;
-    this.handles.forEach((el, i) => {
-      el.hidden = !showHandles;
-      if (!showHandles) return;
-      const h = HANDLES[i];
-      const x = h.includes("w") ? rect!.x : h.includes("e") ? rect!.x + rect!.w : rect!.x + rect!.w / 2;
-      const y = h.includes("n") ? rect!.y : h.includes("s") ? rect!.y + rect!.h : rect!.y + rect!.h / 2;
-      el.style.left = `${x * zoom}px`;
-      el.style.top = `${y * zoom}px`;
-    });
+    if (rect && !this.draft) this.box.showBox(rect, this.angle, zoom);
+    else this.box.hide();
     this.app.status?.update();
   }
 
@@ -310,16 +346,20 @@ export class Selection {
     if (!this.rect) return "";
     if (this.path && this.pathRect && !this.floating) return poly(this.path);
     if (this.path && this.pathRect) return poly(this.mapPath());
+    if (this.angle) return poly(rotatedCorners(this.rect, this.angle));
     return box(this.rect);
   }
 
-  /** Contorno livre levado para a posição/tamanho atuais. */
+  /** Contorno livre levado para a posição, o tamanho e o giro atuais. */
   private mapPath(): Point[] {
     const from = this.pathRect!;
     const to = this.rect!;
     const sx = to.w / from.w;
     const sy = to.h / from.h;
-    return this.path!.map((p) => ({ x: to.x + (p.x - from.x) * sx, y: to.y + (p.y - from.y) * sy }));
+    const c = centerOf(to);
+    return this.path!.map((p) =>
+      rotateAround({ x: to.x + (p.x - from.x) * sx, y: to.y + (p.y - from.y) * sy }, c, this.angle),
+    );
   }
 
   private pathObject(): Path2D {
@@ -327,6 +367,20 @@ export class Selection {
     this.path!.forEach((p, i) => (i ? path.lineTo(p.x, p.y) : path.moveTo(p.x, p.y)));
     path.closePath();
     return path;
+  }
+
+  /** Passa o giro para os pixels: a seleção vira o retângulo que contém a imagem girada. */
+  private bakeRotation() {
+    if (!this.angle || !this.floating) return;
+    const b = this.bounds()!;
+    const ctx = context2d(createCanvas(b.w, b.h));
+    ctx.translate(-b.x, -b.y);
+    this.drawFloating(ctx, this.floating);
+    this.floating = ctx.canvas;
+    this.keyed = null;
+    this.path = null;
+    this.rect = b;
+    this.angle = 0;
   }
 
   /** Pixels flutuantes já no tamanho atual da seleção. */

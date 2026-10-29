@@ -68,5 +68,6 @@ objeto principal bem definido; contornos finos (cabelo) ficam aproximados.
 - `src/session.ts` — sessão e configurações (gravação em fila, só o que mudou).
 - `src-tauri/src/removebg.rs` — remover fundo.
 - `src/selection.ts`, `src/tools/` — seleção e ferramentas.
+- `src/transform.ts` — alças de mover, redimensionar e girar (seleção e forma recém-desenhada).
 - `src/commands.ts`, `src/ui/menus.ts` — lista única de comandos e atalhos; menu
   nativo no Mac e desenhado em HTML no Windows.
