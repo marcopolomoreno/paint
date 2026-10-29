@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pincel",
+  "version": "0.1.0",
+  "identifier": "com.marcopolomoreno.pincel",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Pincel",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 420,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "GraphicsAndDesign",
+    "shortDescription": "Editor de imagens simples",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      { "ext": ["png"], "name": "Imagem PNG", "role": "Editor", "mimeType": "image/png" },
+      { "ext": ["jpg", "jpeg", "jpe", "jfif"], "name": "Imagem JPEG", "role": "Editor", "mimeType": "image/jpeg" },
+      { "ext": ["bmp", "dib"], "name": "Imagem BMP", "role": "Editor", "mimeType": "image/bmp" },
+      { "ext": ["gif"], "name": "Imagem GIF", "role": "Editor", "mimeType": "image/gif" }
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}
