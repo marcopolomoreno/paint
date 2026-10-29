@@ -16,7 +16,7 @@ import { ShapeTool, type ShapeKind } from "./tools/shapes";
 import { TextTool, type TextOptions } from "./tools/text";
 import type { Tool, ToolId } from "./tools/tool";
 import { ZoomTool } from "./tools/zoom";
-import { askToSave, showBusy, showMessage } from "./ui/dialogs";
+import { askToSave, isModalOpen, showBusy, showMessage } from "./ui/dialogs";
 import { imageSizeDialog, resizeDialog } from "./ui/imagedialogs";
 import type { StatusBar } from "./ui/statusbar";
 import { Rulers, stepFor } from "./ui/rulers";
@@ -364,6 +364,8 @@ export class App {
 
     const field = focusedTextField();
     if (field && TEXT_EDIT_COMMANDS.has(id)) return this.textFieldCommand(field, id);
+    // O menu nativo dispara mesmo com um diálogo aberto; o teclado já é barrado em installKeyboard.
+    if (isModalOpen()) return;
 
     try {
       await this.execute(id);
